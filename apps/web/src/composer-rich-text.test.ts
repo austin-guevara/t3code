@@ -51,6 +51,17 @@ describe("composer rich text markdown", () => {
     ]);
   });
 
+  it("parses Slack-style emphasis without changing code or identifier text", () => {
+    expect(parseInlineMarkdown("*bold* _italic_ `*literal*` snake_case", "slack")).toEqual([
+      { text: "bold", marks: ["bold"] },
+      { text: " ", marks: [] },
+      { text: "italic", marks: ["italic"] },
+      { text: " ", marks: [] },
+      { text: "*literal*", marks: ["code"] },
+      { text: " snake_case", marks: [] },
+    ]);
+  });
+
   it("keeps code span contents literal", () => {
     expect(parseInlineMarkdown("`**not bold**`")).toEqual([
       { text: "**not bold**", marks: ["code"] },

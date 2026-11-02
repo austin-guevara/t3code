@@ -589,6 +589,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["composer rich text tiptap bold italic markdown styled wysiwyg"],
   },
   {
+    id: "composer-emphasis-style",
+    title: "Emphasis syntax",
+    to: "/settings/chat",
+    searchTerms: ["slack commonmark bold italic asterisk underscore markdown"],
+  },
+  {
     id: "send-shortcut",
     title: "Send shortcut",
     to: "/settings/chat",

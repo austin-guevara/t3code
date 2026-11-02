@@ -42,7 +42,12 @@ import { ReplaceStep } from "@tiptap/pm/transform";
 
 import { splitPromptIntoComposerSegments } from "~/composer-editor-mentions";
 import { nextOrderedMarkerText } from "~/composer-list-continuation";
-import { parseInlineMarkdown, RICH_TEXT_DELIMITERS, type RichTextMark } from "~/composer-rich-text";
+import {
+  parseInlineMarkdown,
+  RICH_TEXT_DELIMITERS,
+  type RichTextMark,
+  type ComposerEmphasisStyle,
+} from "~/composer-rich-text";
 import { collectInlineContextIds } from "~/lib/composerContextReferences";
 import { composerMathRanges } from "@t3tools/shared/composerInlineTokens";
 
@@ -289,6 +294,24 @@ export const ComposerBoldExtension = Bold.extend({
       markInputRuleOutsideCode(boldStarInputRegex, this.type),
       markInputRuleOutsideCode(boldUnderscoreInputRegex, this.type),
     ];
+  },
+});
+
+export const ComposerSlackBoldExtension = ComposerBoldExtension.extend({
+  addInputRules() {
+    return [markInputRuleOutsideCode(/(?:^|\s)(\*([^*\n]+)\*)$/, this.type)];
+  },
+  addPasteRules() {
+    return [];
+  },
+});
+
+export const ComposerSlackItalicExtension = ComposerItalicExtension.extend({
+  addInputRules() {
+    return [markInputRuleOutsideCode(/(?:^|\s)(_([^_\n]+)_)$/, this.type)];
+  },
+  addPasteRules() {
+    return [];
   },
 });
 
@@ -696,7 +719,13 @@ function textJsonForSpan(text: string, marks: RichTextMark[]): Record<string, un
 export function buildTiptapContent(
   value: string,
   skillLabelFor: (name: string) => SkillMeta | null,
-  options?: { styling?: boolean; blocks?: boolean; literalText?: boolean; literalLength?: number },
+  options?: {
+    styling?: boolean;
+    blocks?: boolean;
+    literalText?: boolean;
+    literalLength?: number;
+    emphasisStyle?: ComposerEmphasisStyle;
+  },
 ): Record<string, unknown>[] {
   if (options?.literalText) {
     return value.split("\n").map((line) => ({
@@ -745,7 +774,9 @@ export function buildTiptapContent(
     .join("");
   let atomIndex = 0;
   const buildInline = (content: string): InlineJson[] => {
-    const spans = styling ? parseInlineMarkdown(content) : [{ text: content, marks: [] }];
+    const spans = styling
+      ? parseInlineMarkdown(content, options?.emphasisStyle)
+      : [{ text: content, marks: [] }];
     const inline: InlineJson[] = [];
     for (const span of spans) {
       span.text.split(sentinel).forEach((piece, index) => {

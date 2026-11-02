@@ -75,6 +75,8 @@ import {
   ComposerCodeExtension,
   ComposerBoldExtension,
   ComposerItalicExtension,
+  ComposerSlackBoldExtension,
+  ComposerSlackItalicExtension,
   ComposerStrikeExtension,
   ComposerTaskItemExtension,
   ComposerTaskListExtension,
@@ -147,6 +149,7 @@ export interface ComposerPromptEditorProps {
   value: string;
   cursor: number;
   richTextEnabled?: boolean;
+  emphasisStyle?: "commonmark" | "slack";
   literalText?: boolean;
   contextRecords: ComposerDraftContextRecords;
   buildContextClipboardFragment?:
@@ -785,7 +788,7 @@ export function ComposerPromptEditorTiptap(props: ComposerPromptEditorProps) {
   // a caret inside unknown `$name` text, so retain the exact Markdown offset here.
   return (
     <ComposerPromptEditorTiptapInner
-      key={`${props.draftKey ?? ""}:${props.literalText ? "literal" : props.richTextEnabled ? "rich" : "plain"}`}
+      key={`${props.draftKey ?? ""}:${props.literalText ? "literal" : props.richTextEnabled ? "rich" : "plain"}:${props.emphasisStyle ?? "commonmark"}`}
       {...props}
       restoreFocusRef={restoreFocusRef}
       initialExpandedCursor={
@@ -814,7 +817,10 @@ const ComposerUndoGroupingExtension = Extension.create<
 });
 
 // Module scope keeps extension identity stable; Tiptap hooks read config through this.
-function createComposerExtensions(richText: boolean) {
+function createComposerExtensions(
+  richText: boolean,
+  emphasisStyle: "commonmark" | "slack" = "commonmark",
+) {
   return [
     StarterKit.configure({
       blockquote: false,
@@ -846,8 +852,8 @@ function createComposerExtensions(richText: boolean) {
     ...(richText
       ? [
           ComposerBoldSelectionOnlyExtension,
-          ComposerItalicExtension,
-          ComposerBoldExtension,
+          emphasisStyle === "slack" ? ComposerSlackItalicExtension : ComposerItalicExtension,
+          emphasisStyle === "slack" ? ComposerSlackBoldExtension : ComposerBoldExtension,
           ComposerStrikeExtension,
           ComposerCodeExtension,
           ComposerCodeBlockExtension.extend({
@@ -920,6 +926,7 @@ function createComposerExtensions(richText: boolean) {
 }
 
 const RICH_TEXT_EXTENSIONS = createComposerExtensions(true);
+const SLACK_TEXT_EXTENSIONS = createComposerExtensions(true, "slack");
 const PLAIN_TEXT_EXTENSIONS = createComposerExtensions(false);
 
 function ComposerPromptEditorTiptapInner(
@@ -932,6 +939,7 @@ function ComposerPromptEditorTiptapInner(
     value,
     cursor,
     richTextEnabled,
+    emphasisStyle = "commonmark",
     literalText = false,
     contextRecords,
     buildContextClipboardFragment,
@@ -1105,7 +1113,11 @@ function ComposerPromptEditorTiptapInner(
 
   const editor = useEditor(
     {
-      extensions: richText ? RICH_TEXT_EXTENSIONS : PLAIN_TEXT_EXTENSIONS,
+      extensions: richText
+        ? emphasisStyle === "slack"
+          ? SLACK_TEXT_EXTENSIONS
+          : RICH_TEXT_EXTENSIONS
+        : PLAIN_TEXT_EXTENSIONS,
       content: buildDocJson(value, (name) => composerSkillMeta(skills, name), {
         styling: richText,
         literalText,
@@ -1400,7 +1412,7 @@ function ComposerPromptEditorTiptapInner(
             insertMarkdownParagraphs(
               text,
               skillLabelFor,
-              { styling: richText, blocks: !nested, literalText, literalLength },
+              { styling: richText, blocks: !nested, literalText, literalLength, emphasisStyle },
               (content) => {
                 editorInstance
                   .chain()
@@ -1839,7 +1851,13 @@ function ComposerPromptEditorTiptapInner(
 function insertMarkdownParagraphs(
   value: string,
   skillLabelFor: (name: string) => SkillMeta | null,
-  options: { styling: boolean; blocks?: boolean; literalText?: boolean; literalLength?: number },
+  options: {
+    styling: boolean;
+    blocks?: boolean;
+    literalText?: boolean;
+    literalLength?: number;
+    emphasisStyle?: "commonmark" | "slack";
+  },
   insertContent: (content: JSONContent[] | JSONContent) => void,
 ): void {
   const blocks = buildTiptapContent(value, skillLabelFor, options);

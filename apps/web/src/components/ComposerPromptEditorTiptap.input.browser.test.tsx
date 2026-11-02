@@ -437,3 +437,43 @@ describe("an Arabic line", () => {
     );
   });
 });
+
+it("uses Slack emphasis for input and paste, and restores canonical Markdown", async () => {
+  const onChange = vi.fn();
+  const editorRef = createRef<ComposerPromptEditorHandle>();
+  const props = {
+    editorRef,
+    value: "",
+    cursor: 0,
+    richTextEnabled: true,
+    emphasisStyle: "slack" as const,
+    contextRecords: new Map(),
+    skills: [],
+    disabled: false,
+    placeholder: "",
+    onChange,
+    onPaste: () => {},
+  };
+  await using screen = await render(<ComposerPromptEditor {...props} />);
+  const editor = editorIn(screen.container);
+  await act(() => {
+    for (const char of "*bold* _italic_") {
+      const { from, to } = editor.state.selection;
+      typeText(editor, from, to, char);
+    }
+  });
+  expect(serializeEditorDoc(editor.state.doc).value).toBe("**bold** *italic*");
+  await act(() => {
+    editor.commands.selectAll();
+    const clipboardData = new DataTransfer();
+    clipboardData.setData("text/plain", "*pasted* _words_");
+    editor.view.dom.dispatchEvent(new ClipboardEvent("paste", { clipboardData, cancelable: true }));
+  });
+  expect(serializeEditorDoc(editor.state.doc).value).toBe("**pasted** *words*");
+  await screen.rerender(
+    <ComposerPromptEditor {...props} draftKey="restored" value="**saved bold** *saved italic*" />,
+  );
+  const restored = editorIn(screen.container);
+  expect(serializeEditorDoc(restored.state.doc).value).toBe("**saved bold** *saved italic*");
+  expect(restored.view.dom.querySelector("strong")?.textContent).toContain("saved bold");
+});

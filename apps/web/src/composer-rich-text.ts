@@ -1,3 +1,5 @@
+export type ComposerEmphasisStyle = "commonmark" | "slack";
+
 export type RichTextMark = "bold" | "italic" | "strike" | "code";
 
 interface RichTextSpan {
@@ -26,7 +28,10 @@ function pushSpan(spans: RichTextSpan[], text: string, marks: RichTextMark[]): v
   }
 }
 
-export function parseInlineMarkdown(text: string): RichTextSpan[] {
+export function parseInlineMarkdown(
+  text: string,
+  emphasisStyle: ComposerEmphasisStyle = "commonmark",
+): RichTextSpan[] {
   const root: RichTextSpan[] = [];
   const stack: { delimiter: string; mark: RichTextMark; spans: RichTextSpan[] }[] = [];
   const current = () => stack.at(-1)?.spans ?? root;
@@ -86,7 +91,12 @@ export function parseInlineMarkdown(text: string): RichTextSpan[] {
         index += top.delimiter.length;
       } else if (canOpen && (char !== "~" || end - index >= 2)) {
         const length = char === "~" || end - index >= 2 ? 2 : 1;
-        const mark = char === "~" ? "strike" : length === 2 ? "bold" : "italic";
+        const mark =
+          char === "~"
+            ? "strike"
+            : length === 2 || (emphasisStyle === "slack" && char === "*")
+              ? "bold"
+              : "italic";
         // Prevent self-nesting, including alternate delimiters, to bound the stack by supported styles.
         if (stack.some((frame) => frame.mark === mark)) {
           pushSpan(current(), text.slice(index, end), []);
