@@ -1,4 +1,6 @@
-export type ComposerEmphasisStyle = "commonmark" | "slack";
+import type { ClientSettings } from "@t3tools/contracts";
+
+export type ComposerEmphasisStyle = ClientSettings["composerEmphasisStyle"];
 
 export type RichTextMark = "bold" | "italic" | "strike" | "code";
 

@@ -34,11 +34,13 @@ function Composer({
   richTextEnabled,
   skills,
   onChange,
+  emphasisStyle = "commonmark",
 }: {
   value: string;
   richTextEnabled: boolean;
   skills: ReadonlyArray<ServerProviderSkill>;
   onChange?: ComposerPromptEditorProps["onChange"] | undefined;
+  emphasisStyle?: ComposerPromptEditorProps["emphasisStyle"];
 }) {
   const [prompt, setPrompt] = useState({ value, cursor: value.length });
   return (
@@ -47,6 +49,7 @@ function Composer({
       value={prompt.value}
       cursor={prompt.cursor}
       richTextEnabled={richTextEnabled}
+      emphasisStyle={emphasisStyle}
       contextRecords={new Map()}
       skills={skills}
       disabled={false}
@@ -439,22 +442,9 @@ describe("an Arabic line", () => {
 });
 
 it("uses Slack emphasis for input and paste, and restores canonical Markdown", async () => {
-  const onChange = vi.fn();
-  const editorRef = createRef<ComposerPromptEditorHandle>();
-  const props = {
-    editorRef,
-    value: "",
-    cursor: 0,
-    richTextEnabled: true,
-    emphasisStyle: "slack" as const,
-    contextRecords: new Map(),
-    skills: [],
-    disabled: false,
-    placeholder: "",
-    onChange,
-    onPaste: () => {},
-  };
-  await using screen = await render(<ComposerPromptEditor {...props} />);
+  await using screen = await render(
+    <Composer value="" richTextEnabled skills={[]} emphasisStyle="slack" />,
+  );
   const editor = editorIn(screen.container);
   await act(() => {
     for (const char of "*bold* _italic_") {
@@ -471,7 +461,13 @@ it("uses Slack emphasis for input and paste, and restores canonical Markdown", a
   });
   expect(serializeEditorDoc(editor.state.doc).value).toBe("**pasted** *words*");
   await screen.rerender(
-    <ComposerPromptEditor {...props} draftKey="restored" value="**saved bold** *saved italic*" />,
+    <Composer
+      key="restored"
+      value="**saved bold** *saved italic*"
+      richTextEnabled
+      skills={[]}
+      emphasisStyle="slack"
+    />,
   );
   const restored = editorIn(screen.container);
   expect(serializeEditorDoc(restored.state.doc).value).toBe("**saved bold** *saved italic*");

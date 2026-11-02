@@ -58,6 +58,7 @@ import {
   pastedPathQueryLength,
 } from "~/composer-logic";
 import { useStableCallback } from "~/hooks/useStableCallback";
+import type { ComposerEmphasisStyle } from "~/composer-rich-text";
 import { caretLineDirection, ComposerTextDirectionExtension } from "~/composer-text-direction";
 import {
   collectComposerPromptInlineTokens,
@@ -149,7 +150,7 @@ export interface ComposerPromptEditorProps {
   value: string;
   cursor: number;
   richTextEnabled?: boolean;
-  emphasisStyle?: "commonmark" | "slack";
+  emphasisStyle?: ComposerEmphasisStyle;
   literalText?: boolean;
   contextRecords: ComposerDraftContextRecords;
   buildContextClipboardFragment?:
@@ -819,7 +820,7 @@ const ComposerUndoGroupingExtension = Extension.create<
 // Module scope keeps extension identity stable; Tiptap hooks read config through this.
 function createComposerExtensions(
   richText: boolean,
-  emphasisStyle: "commonmark" | "slack" = "commonmark",
+  emphasisStyle: ComposerEmphasisStyle = "commonmark",
 ) {
   return [
     StarterKit.configure({
@@ -1856,7 +1857,7 @@ function insertMarkdownParagraphs(
     blocks?: boolean;
     literalText?: boolean;
     literalLength?: number;
-    emphasisStyle?: "commonmark" | "slack";
+    emphasisStyle?: ComposerEmphasisStyle;
   },
   insertContent: (content: JSONContent[] | JSONContent) => void,
 ): void {
