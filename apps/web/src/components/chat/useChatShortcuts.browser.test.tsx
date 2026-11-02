@@ -1,4 +1,5 @@
 import {
+  DEFAULT_CLIENT_SETTINGS,
   EnvironmentId,
   ThreadId,
   type ScopedThreadRef,
@@ -6,11 +7,21 @@ import {
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import { useEffect, useState } from "react";
-import { expect, it } from "vite-plus/test";
-import { userEvent } from "vite-plus/test/browser";
+import { expect, it, vi } from "vite-plus/test";
+import { page, userEvent } from "vite-plus/test/browser";
 
+import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
+import { isMacPlatform } from "~/lib/utils";
+import { RightPanelTabs } from "../RightPanelTabs";
 import { surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
-import { render } from "../../../test/render";
+import { act, render } from "../../../test/render";
+import { AsyncResult } from "effect/reactivity";
+import type { OpenPreviewMutation } from "../../browser/openFileInPreview";
+import { __setClientSettingsForTests } from "../../hooks/useSettings";
+import { startWorkspaceFocus } from "../../lib/workspaceFocus";
+
+const mocks = vi.hoisted(() => ({ openPreview: vi.fn<OpenPreviewMutation<never>>() }));
+vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => mocks.openPreview }));
 import type { ChatComposerHandle } from "./ChatComposer";
 import { useChatShortcuts, type ChatShortcutCommands } from "./useChatShortcuts";
 import { useRightPanelActions } from "./useRightPanelActions";
@@ -203,8 +214,20 @@ it("runs a side chat's composer chords only from its composer, and never thread 
   expect(stops).toEqual([]);
 });
 
-function ClosedPanelChat({ threadRef }: { threadRef: ScopedThreadRef }) {
-  const { shortcuts } = useRightPanelActions({
+function ClosedPanelChat({
+  threadRef,
+  browser = false,
+  newTab = false,
+}: {
+  threadRef: ScopedThreadRef;
+  browser?: boolean;
+  newTab?: boolean;
+}) {
+  const panel = useRightPanelStore((state) =>
+    selectThreadRightPanelState(state.byThreadKey, threadRef),
+  );
+  const panelOpen = panel.isOpen;
+  const actions = useRightPanelActions({
     activeThreadRef: threadRef,
     activeProject: null,
     activeRightPanelSurface: null,
@@ -216,13 +239,13 @@ function ClosedPanelChat({ threadRef }: { threadRef: ScopedThreadRef }) {
     isServerThread: true,
     embedded: false,
     isGitRepo: false,
-    browserAvailable: false,
-    canOperatePreview: false,
+    browserAvailable: browser,
+    canOperatePreview: browser,
     canOperateTerminal: false,
     onAddTerminal: () => {},
     diffOpen: false,
     previewPanelOpen: false,
-    rightPanelOpen: false,
+    rightPanelOpen: panelOpen,
     canMaximizeRightPanel: true,
     rightPanelMaximized: false,
     supportsPullRequests: false,
@@ -234,11 +257,62 @@ function ClosedPanelChat({ threadRef }: { threadRef: ScopedThreadRef }) {
     closeRightPanelSurface: () => {},
   });
   return (
-    <Chat
-      composerKeys={[]}
-      commands={shortcuts}
-      keybindings={[ctrlShift("m", "rightPanel.openDevice")]}
-    />
+    <>
+      <Chat
+        composerKeys={[]}
+        commands={actions.shortcuts}
+        keybindings={
+          newTab
+            ? DEFAULT_RESOLVED_KEYBINDINGS
+            : [ctrlShift("m", browser ? "rightPanel.openBrowser" : "rightPanel.openDevice")]
+        }
+      />
+      {newTab && panelOpen ? (
+        <RightPanelTabs
+          mode="inline"
+          open
+          newSurfaceMenu={actions.newSurfaceMenu}
+          keybindings={DEFAULT_RESOLVED_KEYBINDINGS}
+          getShortcutContext={() => shortcutContext}
+          surfaces={panel.surfaces}
+          environmentId={threadRef.environmentId}
+          activeSurfaceId={panel.activeSurfaceId}
+          pendingSurfaceIds={new Set()}
+          previewSessions={{}}
+          desktopByTabId={{}}
+          terminalLabelsById={new Map()}
+          onActivate={actions.activateRightPanelSurfaceStable}
+          onCloseSurface={() => {}}
+          onCloseOtherSurfaces={() => {}}
+          onCloseSurfacesToRight={() => {}}
+          onCloseAllSurfaces={() => useRightPanelStore.getState().closeAllSurfaces(threadRef)}
+          onCopyFilePath={actions.copyRightPanelFilePathStable}
+          onAddBrowser={() => actions.createBrowserSurface()}
+          onAddBrowserInProfile={actions.createBrowserSurfaceStable}
+          onAddTerminal={() => {}}
+          onAddDiff={actions.addDiffSurfaceStable}
+          onAddFiles={actions.addFilesSurfaceStable}
+          onAddPullRequest={actions.addPullRequestSurfaceStable}
+          onAddPullRequests={actions.addPullRequestsSurfaceStable}
+          onAddDevice={actions.addDeviceSurfaceStable}
+          browserAvailable={false}
+          terminalAvailable={false}
+          diffAvailable={false}
+          filesAvailable={false}
+          pullRequestAvailable={false}
+          pullRequestsAvailable={false}
+          deviceAvailable
+        >
+          {null}
+        </RightPanelTabs>
+      ) : null}
+      {browser && panelOpen ? (
+        <section data-workspace-area="panel" tabIndex={-1}>
+          <button data-workspace-focus-default>Browser tab</button>
+          <input aria-label="Browser URL" data-workspace-focus-default data-preview-url-input />
+        </section>
+      ) : null}
+    </>
   );
 }
 
@@ -257,4 +331,64 @@ it("opens a surface through chat shortcuts while no panel is mounted", async () 
   await userEvent.keyboard("{Control>}{Shift>}M{/Shift}{/Control}");
   expect(readPanel().isOpen).toBe(true);
   expect(readPanel().surfaces.map((surface) => surface.kind)).toEqual(["device"]);
+});
+
+it("focuses the URL after asynchronous browser creation opens the panel", async () => {
+  const threadRef = {
+    environmentId: EnvironmentId.make("panel-shortcut-test"),
+    threadId: ThreadId.make("browser-focus"),
+  };
+  __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
+  let resolveOpening!: (value: Awaited<ReturnType<OpenPreviewMutation<never>>>) => void;
+  const opening = new Promise<Awaited<ReturnType<OpenPreviewMutation<never>>>>((resolve) => {
+    resolveOpening = resolve;
+  });
+  mocks.openPreview.mockReset().mockReturnValue(opening);
+  await using screen = await render(<ClosedPanelChat threadRef={threadRef} browser />);
+  using cleanup = new DisposableStack();
+  cleanup.defer(startWorkspaceFocus(screen.router!));
+  cleanup.defer(() => useRightPanelStore.getState().closeAllSurfaces(threadRef));
+  await userEvent.keyboard("{Control>}{Shift>}M{/Shift}{/Control}");
+  await vi.waitFor(() => expect(mocks.openPreview).toHaveBeenCalledOnce());
+  await act(() =>
+    resolveOpening(
+      AsyncResult.success({
+        threadId: threadRef.threadId,
+        tabId: "new-browser",
+        navStatus: { _tag: "Idle" },
+        canGoBack: false,
+        canGoForward: false,
+        updatedAt: "2026-11-02T00:00:00.000Z",
+      }),
+    ),
+  );
+  await expect.element(screen.getByRole("textbox", { name: "Browser URL" })).toHaveFocus();
+});
+
+it("opens the new-tab menu from a closed panel and preserves its letter shortcuts", async () => {
+  __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
+  const threadRef = {
+    environmentId: EnvironmentId.make("panel-shortcut-test"),
+    threadId: ThreadId.make("new-tab-menu"),
+  };
+  await using _screen = await render(<ClosedPanelChat threadRef={threadRef} newTab />);
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => useRightPanelStore.getState().closeAllSurfaces(threadRef));
+  const readPanel = () =>
+    selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, threadRef);
+  const newTabShortcut = isMacPlatform(navigator.platform)
+    ? "{Meta>}t{/Meta}"
+    : "{Control>}t{/Control}";
+  expect(readPanel().isOpen).toBe(false);
+  await userEvent.keyboard(newTabShortcut);
+  await expect.element(page.getByRole("menu")).toBeVisible();
+  expect(readPanel().surfaces).toEqual([]);
+  await userEvent.keyboard("m");
+  expect(readPanel().surfaces.map((surface) => surface.kind)).toEqual(["device"]);
+  await act(() => useRightPanelStore.getState().close(threadRef));
+  await userEvent.keyboard(newTabShortcut);
+  await expect.element(page.getByRole("menu")).toBeVisible();
+  expect(readPanel().isOpen).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await expect.element(page.getByRole("menu")).not.toBeInTheDocument();
 });

@@ -97,7 +97,7 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
       !input.enabled ||
       embedded ||
       isCommandPaletteOpen() ||
-      !command.startsWith("rightPanel.open")
+      (command !== "rightPanel.new" && !command.startsWith("rightPanel.open"))
     )
       return;
     input.commands[command as KeybindingCommand]?.({

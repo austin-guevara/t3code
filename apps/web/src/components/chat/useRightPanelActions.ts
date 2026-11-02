@@ -7,7 +7,7 @@ import { resolveExplicitDiffOpenOnActivate } from "../ChatView.logic";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { type ScopedThreadRef, type RunId } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -100,6 +100,10 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     onDiffPanelOpen,
   } = input;
 
+  const [newSurfaceMenuOpen, setNewSurfaceMenuOpen] = useState(false);
+  if (!rightPanelOpen && newSurfaceMenuOpen) setNewSurfaceMenuOpen(false);
+  const newSurfaceMenu = { open: newSurfaceMenuOpen, onOpenChange: setNewSurfaceMenuOpen };
+
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const onToggleDiff = () => {
     if (!isServerThread) {
@@ -113,13 +117,15 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     }
   };
   const onToggleDiffStable = useStableCallback(onToggleDiff);
-  const createBrowserSurface = (profileId?: string) => {
+  const createBrowserSurface = (profileId?: string, focusUrl = false) => {
     if (!activeThreadRef || !canOperatePreview) return;
     void addBrowserSurface({
       threadRef: activeThreadRef,
       openPreview,
       ...(profileId === undefined ? {} : { profileId }),
     }).then((result) => {
+      if (result._tag === "Success" && focusUrl)
+        requestWorkspaceFocus({ area: "panel", selector: "[data-preview-url-input]" });
       if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
       const error = squashAtomCommandFailure(result);
       if (error instanceof BrowserSettingsReadError) {
@@ -343,10 +349,21 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     };
 
   const shortcuts = {
-    "rightPanel.openBrowser": openSurface(canOperatePreview && browserAvailable, () => {
-      createBrowserSurface();
-      requestWorkspaceFocus({ area: "panel", selector: "[data-preview-url-input]" });
-    }),
+    "rightPanel.new": ({ event }) => {
+      if (
+        !activeThreadRef ||
+        event.isComposing ||
+        (!newSurfaceMenuOpen && document.querySelector(LAUNCHER_SHORTCUT_BLOCKING_LAYERS))
+      )
+        return false;
+      if (!event.repeat) {
+        useRightPanelStore.getState().show(activeThreadRef);
+        setNewSurfaceMenuOpen(true);
+      }
+    },
+    "rightPanel.openBrowser": openSurface(canOperatePreview && browserAvailable, () =>
+      createBrowserSurface(undefined, true),
+    ),
     "rightPanel.openTerminal": openSurface(
       activeProject !== null && input.canOperateTerminal,
       input.onAddTerminal,
@@ -376,6 +393,7 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
 
   return {
     shortcuts,
+    newSurfaceMenu,
     activateRightPanelSurfaceStable,
     addDeviceSurfaceStable,
     addDiffSurfaceStable,

@@ -46,6 +46,12 @@ on macOS and Ctrl on Windows and Linux, including GNOME, KDE Plasma, Niri, and
 Hyprland. If a custom desktop shortcut takes the same keys, choose another binding
 in Settings.
 
+## Open a new panel tab
+
+In a chat, `mod+t` opens the right panel and its new-tab menu, including when the panel
+is closed or has no tabs. Press a tab type’s letter to choose it. The shortcut leaves
+terminal-focused keys to the terminal.
+
 ## Open a specific panel tab
 
 In Settings → Keybindings, bind a **Right Panel: Open** command for Browser, Terminal, Files,
