@@ -1,4 +1,10 @@
-import type { KeybindingCommand, ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ThreadId,
+  type ScopedThreadRef,
+  type KeybindingCommand,
+  type ResolvedKeybindingsConfig,
+} from "@t3tools/contracts";
 import { useEffect, useState } from "react";
 import { expect, it } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
@@ -6,7 +12,11 @@ import { userEvent } from "vite-plus/test/browser";
 import { surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
 import { render } from "../../../test/render";
 import type { ChatComposerHandle } from "./ChatComposer";
-import { useChatShortcuts } from "./useChatShortcuts";
+import { useChatShortcuts, type ChatShortcutCommands } from "./useChatShortcuts";
+import { useRightPanelActions } from "./useRightPanelActions";
+import { useDeviceState } from "../../state/device";
+import { useThreadPreviewState } from "../../previewStateStore";
+import { selectThreadRightPanelState, useRightPanelStore } from "../../rightPanelStore";
 
 const shortcutContext = {
   terminalFocus: false,
@@ -47,10 +57,15 @@ function Launcher(props: { keys: string; received: string[] }) {
 
 // The chat's shortcut listener registers when the chat mounts, so a launcher that opens
 // later registers after it. Tests mount the chat first and add the launcher by rerendering.
-function Chat(props: { composerKeys: string[]; launcher?: { keys: string; received: string[] } }) {
+function Chat(props: {
+  composerKeys: string[];
+  launcher?: { keys: string; received: string[] };
+  keybindings?: ResolvedKeybindingsConfig;
+  commands?: ChatShortcutCommands;
+}) {
   useChatShortcuts({
     enabled: true,
-    keybindings: [],
+    keybindings: props.keybindings ?? [],
     scriptKeybindings: [],
     getShortcutContext: () => shortcutContext,
     threadFindActive: false,
@@ -65,7 +80,7 @@ function Chat(props: { composerKeys: string[]; launcher?: { keys: string; receiv
     },
     branchToolbarRef: { current: null },
     closeThreadFind: () => {},
-    commands: {},
+    commands: props.commands ?? {},
     fallback: () => undefined,
   });
   return props.launcher ? <Launcher {...props.launcher} /> : null;
@@ -186,4 +201,60 @@ it("runs a side chat's composer chords only from its composer, and never thread 
 
   expect(toggles).toEqual(["model"]);
   expect(stops).toEqual([]);
+});
+
+function ClosedPanelChat({ threadRef }: { threadRef: ScopedThreadRef }) {
+  const { shortcuts } = useRightPanelActions({
+    activeThreadRef: threadRef,
+    activeProject: null,
+    activeRightPanelSurface: null,
+    activePreviewState: useThreadPreviewState(null),
+    deviceState: { ...useDeviceState(null).state, onboardingCompleted: true, hostStatus: "ready" },
+    deviceStateLoaded: true,
+    pullRequestPanelTarget: null,
+    threadPanelPresentation: "inline",
+    isServerThread: true,
+    embedded: false,
+    isGitRepo: false,
+    browserAvailable: false,
+    canOperatePreview: false,
+    canOperateTerminal: false,
+    onAddTerminal: () => {},
+    diffOpen: false,
+    previewPanelOpen: false,
+    rightPanelOpen: false,
+    canMaximizeRightPanel: true,
+    rightPanelMaximized: false,
+    supportsPullRequests: false,
+    pullRequestsSurfaceAvailable: false,
+    gitCwd: null,
+    activeProjectCwd: null,
+    explicitDiffOpenRef: { current: null },
+    onDiffPanelOpen: undefined,
+    closeRightPanelSurface: () => {},
+  });
+  return (
+    <Chat
+      composerKeys={[]}
+      commands={shortcuts}
+      keybindings={[ctrlShift("m", "rightPanel.openDevice")]}
+    />
+  );
+}
+
+it("opens a surface through chat shortcuts while no panel is mounted", async () => {
+  const threadRef = {
+    environmentId: EnvironmentId.make("panel-shortcut-test"),
+    threadId: ThreadId.make("closed-panel"),
+  };
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => useRightPanelStore.getState().closeAllSurfaces(threadRef));
+  const readPanel = () =>
+    selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, threadRef);
+  expect(readPanel().isOpen).toBe(false);
+  // router: false because panel commands act on the local panel store without navigating.
+  await using _screen = await render(<ClosedPanelChat threadRef={threadRef} />, { router: false });
+  await userEvent.keyboard("{Control>}{Shift>}M{/Shift}{/Control}");
+  expect(readPanel().isOpen).toBe(true);
+  expect(readPanel().surfaces.map((surface) => surface.kind)).toEqual(["device"]);
 });
