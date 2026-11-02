@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
+import { toastManager } from "../ui/toast";
 import { act, render } from "../../../test/render";
 
 import type { PreviewableServer } from "./useDiscoveredLocalServers";
@@ -327,6 +328,29 @@ describe("PreviewView", () => {
     await forward();
     await expect.element(address).not.toHaveFocus();
     expect(listeners.size).toBe(0);
+  });
+
+  it("copies the current tab URL through the action bus only while visible", async () => {
+    setup();
+    await using screen = await render(view());
+    using writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    using toast = vi.spyOn(toastManager, "add").mockReturnValue("copy-toast");
+    const { dispatchPreviewAction } = await import("./previewActionBus");
+    await act(() => dispatchPreviewAction("copy-url"));
+    expect(writeText).toHaveBeenCalledWith("http://example.com/");
+    expect(toast).toHaveBeenCalledWith({
+      type: "success",
+      title: "Browser URL copied",
+      description: "http://example.com/",
+    });
+    writeText.mockClear();
+    toast.mockClear();
+    await screen.rerender(
+      <PreviewView threadRef={TEST_THREAD_REF} tabId="tab-1" visible={false} />,
+    );
+    await act(() => dispatchPreviewAction("copy-url"));
+    expect(writeText).not.toHaveBeenCalled();
+    expect(toast).not.toHaveBeenCalled();
   });
 
   it("focuses the address bar each time the focus-url shortcut fires", async () => {

@@ -107,7 +107,8 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
     (event) => {
       claim(event);
       const threadRef = readRouteThreadRef();
-      if (threadRef && canOperatePreview(threadRef.environmentId)) dispatchPreviewAction(action);
+      if (action === "copy-url" || (threadRef && canOperatePreview(threadRef.environmentId)))
+        dispatchPreviewAction(action);
     };
 
   return registerCommands(
@@ -162,6 +163,7 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
       },
       "preview.refresh": previewCommand("refresh"),
       "preview.focusUrl": previewCommand("focus-url"),
+      "preview.copyUrl": previewCommand("copy-url"),
       "preview.zoomIn": previewCommand("zoom-in"),
       "preview.zoomOut": previewCommand("zoom-out"),
       "preview.resetZoom": previewCommand("reset-zoom"),
