@@ -2372,6 +2372,8 @@ export default function ChatView(props: ChatViewProps) {
     isGitRepo,
     browserAvailable,
     canOperatePreview,
+    canOperateTerminal,
+    onAddTerminal: addTerminalSurfaceStable,
     diffOpen,
     previewPanelOpen,
     rightPanelOpen,

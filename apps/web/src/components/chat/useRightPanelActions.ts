@@ -34,6 +34,7 @@ import { stackedThreadToast, toastManager } from "../ui/toast";
 import { openDeviceSetupDialog } from "./ChatOverlayHosts";
 import { previewEnvironment } from "../../state/preview";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { LAUNCHER_SHORTCUT_BLOCKING_LAYERS } from "../../lib/surfaceShortcutKey";
 import type { ChatShortcutCommands } from "./useChatShortcuts";
 interface RightPanelActionsInput {
   readonly activeThreadRef: ScopedThreadRef | null;
@@ -50,6 +51,8 @@ interface RightPanelActionsInput {
   readonly isGitRepo: boolean;
   readonly browserAvailable: boolean;
   readonly canOperatePreview: boolean;
+  readonly canOperateTerminal: boolean;
+  readonly onAddTerminal: () => void;
   readonly diffOpen: boolean;
   readonly previewPanelOpen: boolean;
   readonly rightPanelOpen: boolean;
@@ -327,7 +330,38 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     [embedded, togglePreviewPanelStable],
   );
 
+  const openSurface =
+    (available: boolean, open: () => void) =>
+    ({ event }: Parameters<NonNullable<ChatShortcutCommands["rightPanel.toggle"]>>[0]) => {
+      if (
+        !activeThreadRef ||
+        !available ||
+        document.querySelector(LAUNCHER_SHORTCUT_BLOCKING_LAYERS)
+      )
+        return false;
+      if (!event.repeat) open();
+    };
+
   const shortcuts = {
+    "rightPanel.openBrowser": openSurface(canOperatePreview && browserAvailable, () => {
+      createBrowserSurface();
+      requestWorkspaceFocus({ area: "panel", selector: "[data-preview-url-input]" });
+    }),
+    "rightPanel.openTerminal": openSurface(
+      activeProject !== null && input.canOperateTerminal,
+      input.onAddTerminal,
+    ),
+    "rightPanel.openFiles": openSurface(activeProject !== null, addFilesSurface),
+    "rightPanel.openDiff": openSurface(isServerThread && isGitRepo, addDiffSurface),
+    "rightPanel.openPullRequest": openSurface(
+      supportsPullRequests && pullRequestPanelTarget !== null,
+      addPullRequestSurface,
+    ),
+    "rightPanel.openLinkedPullRequests": openSurface(
+      pullRequestsSurfaceAvailable,
+      addPullRequestsSurface,
+    ),
+    "rightPanel.openDevice": openSurface(activeThreadRef !== null, addDeviceSurface),
     "rightPanel.toggle": () => toggleRightPanel(),
     "rightPanel.toggleMaximized": ({ event }) => {
       if (!event.repeat) toggleRightPanelMaximized();

@@ -103,7 +103,7 @@ import { PierreEntryIcon } from "./chat/PierreEntryIcon";
 import { resolvePullRequestState } from "./pullRequest/pullRequestPresentation";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { observeResize } from "~/lib/observeResize";
-import { surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
+import { LAUNCHER_SHORTCUT_BLOCKING_LAYERS, surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
 
 export interface RightPanelTabsProps {
   mode: PreviewPanelMode;
@@ -181,20 +181,6 @@ const SURFACE_DISABLED_REASONS = {
   device: "Devices are only available from a thread.",
   sideChat: "Side chats start after the first message.",
 } as const;
-
-// Closed keepMounted popups must stop blocking shortcuts once their exit transition ends.
-const LAUNCHER_SHORTCUT_BLOCKING_LAYERS = [
-  "dialog-popup",
-  "alert-dialog-popup",
-  "command-dialog-popup",
-  "menu-popup",
-  "select-popup",
-  "popover-popup",
-  "combobox-popup",
-  "autocomplete-popup",
-]
-  .map((slot) => `[data-slot="${slot}"]:is([data-open],[data-ending-style])`)
-  .join(",");
 
 const SURFACE_UNAVAILABLE_HINTS = {
   browser: "Only available in the desktop app.",

@@ -46,6 +46,13 @@ on macOS and Ctrl on Windows and Linux, including GNOME, KDE Plasma, Niri, and
 Hyprland. If a custom desktop shortcut takes the same keys, choose another binding
 in Settings.
 
+## Open a specific panel tab
+
+In Settings → Keybindings, bind a **Right Panel: Open** command for Browser, Terminal, Files,
+Diff, Pull Request, Linked Pull Requests, or Device. These commands have no default shortcuts.
+They use the same availability rules as the new-tab menu and work while the panel is closed.
+Opening a browser through its command focuses the address bar.
+
 ## Copy pull request references
 
 With a PR open in the right panel or on the Pull requests page, use `mod+shift+c`

@@ -92,6 +92,19 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
     event.preventDefault();
     event.stopPropagation();
   });
+  const handleMenuAction = useEffectEvent((command: string) => {
+    if (
+      !input.enabled ||
+      embedded ||
+      isCommandPaletteOpen() ||
+      !command.startsWith("rightPanel.open")
+    )
+      return;
+    input.commands[command as KeybindingCommand]?.({
+      event: new KeyboardEvent("keydown"),
+      terminalFocusOwner: null,
+    });
+  });
   const dismissFind = useEffectEvent((event: KeyboardEvent) => {
     if (
       event.key !== "Escape" ||
@@ -132,9 +145,11 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
     const onKeyDown = (event: KeyboardEvent) => dismissFind(event);
     window.addEventListener("keydown", onKeyDownCapture, true);
     window.addEventListener("keydown", onKeyDown);
+    const unsubscribe = window.desktopBridge?.onMenuAction(handleMenuAction);
     return () => {
       window.removeEventListener("keydown", onKeyDownCapture, true);
       window.removeEventListener("keydown", onKeyDown);
+      unsubscribe?.();
     };
   }, [composerElement, embedded]);
 }
