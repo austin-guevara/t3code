@@ -15,7 +15,7 @@ import { userEvent } from "vite-plus/test/browser";
 
 import { act, fakeTimers, render } from "../../test/render";
 
-import { serializeEditorDoc, markdownToFlat, flatToMarkdown } from "~/composer-rich-text-doc";
+import { serializeEditorDoc } from "~/composer-rich-text-doc";
 import { isMacPlatform } from "~/lib/utils";
 import {
   ComposerPromptEditorTiptap as ComposerPromptEditor,
@@ -454,33 +454,17 @@ it("pastes a URL onto selected text as a rendered link and restores its destinat
     "https://example.com/guide",
   );
   expect(editor.view.dom.querySelector("img.composer-link-favicon")?.getAttribute("alt")).toBe("");
-  const restored = await screen.update("read the [guide](https://example.com/guide)");
+  await screen.rerender(
+    <Composer
+      key="restored"
+      value="read the [guide](https://example.com/guide)"
+      richTextEnabled
+      skills={[]}
+    />,
+  );
+  const restored = editorIn(screen.container);
   expect(restored.view.dom.querySelector("a")?.textContent).toContain("guide");
   expect(serializeEditorDoc(restored.state.doc).value).toBe(
     "read the [guide](https://example.com/guide)",
   );
 });
-
-it.each(["a]b[c\\d", "[abc]", " guide [one] after "])(
-  "preserves selected link label %s through draft restoration",
-  async (label) => {
-    await using screen = await mountEditor(label);
-    const { editor } = screen;
-    await act(() => {
-      editor.commands.selectAll();
-      editor.commands.toggleBold();
-      const clipboardData = new DataTransfer();
-      clipboardData.setData("text/plain", "https://example.com/guide");
-      editor.view.dom.dispatchEvent(
-        new ClipboardEvent("paste", { clipboardData, cancelable: true }),
-      );
-    });
-    const map = serializeEditorDoc(editor.state.doc);
-
-    for (let flat = 0; flat <= label.length; flat++)
-      expect(markdownToFlat(map, flatToMarkdown(map, flat))).toBe(flat);
-    const restored = await screen.update(map.value);
-    expect(restored.view.dom.querySelector("a")?.textContent).toBe(label);
-    expect(serializeEditorDoc(restored.state.doc).value).toBe(map.value);
-  },
-);

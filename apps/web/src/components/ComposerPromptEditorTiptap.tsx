@@ -745,6 +745,11 @@ function decorationsForSelection(state: EditorState): DecorationSet {
       );
     }
   }
+  return DecorationSet.create(doc, decorations);
+}
+
+function linkFaviconDecorations(doc: ProseMirrorNode): DecorationSet {
+  const decorations: Decoration[] = [];
   doc.descendants((node, pos) => {
     if (!node.isText) return;
     const href = node.marks.find((mark) => mark.type.name === "link")?.attrs.href;
@@ -785,10 +790,22 @@ function decorationsForSelection(state: EditorState): DecorationSet {
   return DecorationSet.create(doc, decorations);
 }
 
+const LinkFaviconPluginKey = new PluginKey<DecorationSet>("composer-link-favicons");
+const ComposerLinkFaviconPlugin = new Plugin({
+  key: LinkFaviconPluginKey,
+  state: {
+    init: (_, state) => linkFaviconDecorations(state.doc),
+    apply: (tr, old, _, state) => (tr.docChanged ? linkFaviconDecorations(state.doc) : old),
+  },
+  props: {
+    decorations: (state) => LinkFaviconPluginKey.getState(state),
+  },
+});
+
 const ComposerMarkersExtension = Extension.create({
   name: "composer-rich-markers",
   addProseMirrorPlugins() {
-    return [ComposerMarkerPlugin];
+    return [ComposerMarkerPlugin, ComposerLinkFaviconPlugin];
   },
 });
 

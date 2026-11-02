@@ -311,6 +311,12 @@ describe("composer rich text document model", () => {
     "snake_case stays literal",
     "unmatched ** stays literal",
     "**bold** then @README.md then *italic*",
+    "[guide](https://example.com/guide)",
+    "**[guide](https://example.com/guide) and more**",
+    "[**bold** and *italic*](https://example.com/guide)",
+    "[guide](https://example.com/path\\(one\\))",
+    "https://example.com/_handle_/status/1",
+    "`[literal](https://example.com)`",
   ])("round-trips %s through a real ProseMirror document", (value) => {
     expect(roundTrip(value).value).toBe(value);
   });
@@ -1298,16 +1304,23 @@ describe("inline code entry", () => {
   });
 });
 
-describe("composer links", () => {
-  it("round trips links with nested emphasis and balanced URL parentheses", () => {
-    for (const value of [
-      "[guide](https://example.com/guide)",
-      "**[guide](https://example.com/guide) and more**",
-      "[**bold** and *italic*](https://example.com/guide)",
-      "[guide](https://example.com/path\\(one\\))",
-      "https://example.com/_handle_/status/1",
-      "`[literal](https://example.com)`",
-    ])
-      expect(roundTrip(value).value).toBe(value);
-  });
-});
+it.each(["a]b[c\\d", "[abc]", " guide [one] after "])(
+  "restores linked label %s and its cursor positions",
+  (label) => {
+    const href = "https://example.com/guide";
+    const doc = schema.node("doc", null, [
+      schema.node("paragraph", null, [
+        schema.text(label, [schema.marks.bold!.create(), schema.marks.link!.create({ href })]),
+      ]),
+    ]);
+    const map = serializeEditorDoc(doc);
+    const restored = schema.nodeFromJSON(buildDocJson(map.value, () => null));
+    expect(restored.textContent).toBe(label);
+    restored.firstChild!.forEach((node) =>
+      expect(node.marks.find((mark) => mark.type.name === "link")?.attrs.href).toBe(href),
+    );
+    expect(serializeEditorDoc(restored).value).toBe(map.value);
+    for (let flat = 0; flat <= map.docLength; flat++)
+      expect(markdownToFlat(map, flatToMarkdown(map, flat))).toBe(flat);
+  },
+);
