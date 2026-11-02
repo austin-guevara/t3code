@@ -2569,3 +2569,17 @@ code {
   outline: 2px solid var(--ring);
   outline-offset: -2px;
 }
+
+.composer-tiptap .composer-link {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.composer-link-favicon {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-inline: 0.2em;
+  vertical-align: -0.125em;
+  user-select: none;
+}

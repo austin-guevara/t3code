@@ -1,8 +1,11 @@
+import { parseMarkdownWithMath } from "@t3tools/shared/markdownMath";
+
 export type RichTextMark = "bold" | "italic" | "strike" | "code";
 
 interface RichTextSpan {
   text: string;
   marks: RichTextMark[];
+  href?: string;
 }
 
 export const RICH_TEXT_DELIMITERS: Record<RichTextMark, string> = {
@@ -26,7 +29,82 @@ function pushSpan(spans: RichTextSpan[], text: string, marks: RichTextMark[]): v
   }
 }
 
+export function composerLinkHref(text: string): string | null {
+  if (!text || /[\s<>]/.test(text)) return null;
+  try {
+    const url = new URL(text);
+    return ["http:", "https:", "mailto:"].includes(url.protocol) ? text : null;
+  } catch {
+    return null;
+  }
+}
+
+export function composerLinkRanges(text: string) {
+  if (!text.includes("://") && !text.includes("mailto:")) return [];
+  const links: { start: number; end: number; label: string; href: string }[] = [];
+  const tree = parseMarkdownWithMath(text);
+  const visit = (node: typeof tree | (typeof tree.children)[number]) => {
+    if (node.type === "link") {
+      const start = node.position?.start.offset;
+      const end = node.position?.end.offset;
+      const href = composerLinkHref(node.url);
+      if (start === undefined || end === undefined || !href) return;
+      const labelStart = node.children[0]?.position?.start.offset;
+      const labelEnd = node.children.at(-1)?.position?.end.offset;
+      links.push({
+        start,
+        end,
+        href,
+        label:
+          labelStart === undefined || labelEnd === undefined
+            ? href
+            : text.slice(labelStart, labelEnd),
+      });
+    } else if ("children" in node) node.children.forEach(visit);
+  };
+  visit(tree);
+  return links;
+}
+
 export function parseInlineMarkdown(text: string): RichTextSpan[] {
+  const links = composerLinkRanges(text);
+  if (!links.length) return parseEmphasis(text);
+  let sentinel = "\uFFFC";
+  for (let codePoint = 0xe000; text.includes(sentinel); codePoint++)
+    sentinel = String.fromCodePoint(codePoint);
+  let cursor = 0;
+  const shielded =
+    links
+      .map((link) => {
+        const before = text.slice(cursor, link.start);
+        cursor = link.end;
+        return before + sentinel;
+      })
+      .join("") + text.slice(cursor);
+  let linkIndex = 0;
+  return parseEmphasis(shielded).flatMap((span) =>
+    span.text.split(sentinel).flatMap((part, index) => {
+      const result: RichTextSpan[] = [];
+      if (index > 0) {
+        const link = links[linkIndex++]!;
+        for (const label of link.label === link.href
+          ? [{ text: link.label, marks: [] }]
+          : parseEmphasis(link.label))
+          result.push({
+            text: label.marks.includes("code")
+              ? label.text
+              : label.text.replace(/\\([\\[\]])/g, "$1"),
+            marks: [...new Set([...span.marks, ...label.marks])],
+            href: link.href,
+          });
+      }
+      if (part) result.push({ text: part, marks: span.marks });
+      return result;
+    }),
+  );
+}
+
+function parseEmphasis(text: string): RichTextSpan[] {
   const root: RichTextSpan[] = [];
   const stack: { delimiter: string; mark: RichTextMark; spans: RichTextSpan[] }[] = [];
   const current = () => stack.at(-1)?.spans ?? root;

@@ -57,6 +57,8 @@ import {
   expandCollapsedComposerCursor,
   pastedPathQueryLength,
 } from "~/composer-logic";
+import { composerLinkHref } from "~/composer-rich-text";
+import { faviconUrlForOrigin } from "@t3tools/shared/favicon";
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { caretLineDirection, ComposerTextDirectionExtension } from "~/composer-text-direction";
 import {
@@ -743,6 +745,43 @@ function decorationsForSelection(state: EditorState): DecorationSet {
       );
     }
   }
+  doc.descendants((node, pos) => {
+    if (!node.isText) return;
+    const href = node.marks.find((mark) => mark.type.name === "link")?.attrs.href;
+    if (typeof href !== "string") return;
+    if (
+      doc
+        .resolve(pos)
+        .nodeBefore?.marks.some((mark) => mark.type.name === "link" && mark.attrs.href === href)
+    )
+      return;
+    const source = faviconUrlForOrigin(href);
+    if (!source) return;
+    decorations.push(
+      Decoration.widget(
+        pos,
+        () => {
+          const icon = document.createElement("img");
+          icon.src = source;
+          icon.alt = "";
+          icon.setAttribute("aria-hidden", "true");
+          icon.contentEditable = "false";
+          icon.draggable = false;
+          icon.className = "composer-link-favicon";
+          icon.referrerPolicy = "no-referrer";
+          icon.addEventListener(
+            "error",
+            () => {
+              icon.hidden = true;
+            },
+            { once: true },
+          );
+          return icon;
+        },
+        { side: -1, key: `link-icon-${pos}-${href}` },
+      ),
+    );
+  });
   return DecorationSet.create(doc, decorations);
 }
 
@@ -823,7 +862,9 @@ function createComposerExtensions(richText: boolean) {
       heading: false,
       horizontalRule: false,
       listItem: false,
-      link: false,
+      link: richText
+        ? { openOnClick: false, linkOnPaste: false, HTMLAttributes: { class: "composer-link" } }
+        : false,
       orderedList: false,
       underline: false,
       dropcursor: false,
@@ -1363,6 +1404,30 @@ function ComposerPromptEditorTiptapInner(
             view.dispatch(
               markAsClipboardEdit(
                 view.state.tr.insertText(pastedText, from, to),
+                "paste",
+              ).scrollIntoView(),
+            );
+            return true;
+          }
+          const href = richText ? composerLinkHref(pastedText.trim()) : null;
+          const { selection } = view.state;
+          let plainSelection = !selection.empty;
+          view.state.doc.nodesBetween(selection.from, selection.to, (node) => {
+            if (
+              node.type.spec.code ||
+              (node.isInline && !node.isText) ||
+              node.marks.some((mark) => mark.type.spec.code)
+            )
+              plainSelection = false;
+          });
+          if (href && plainSelection && !selection.$from.parent.type.spec.code) {
+            view.dispatch(
+              markAsClipboardEdit(
+                view.state.tr.addMark(
+                  selection.from,
+                  selection.to,
+                  view.state.schema.marks.link!.create({ href }),
+                ),
                 "paste",
               ).scrollIntoView(),
             );

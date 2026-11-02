@@ -1297,3 +1297,17 @@ describe("inline code entry", () => {
     expect(marked(editor, mark)).toEqual(["foo"]);
   });
 });
+
+describe("composer links", () => {
+  it("round trips links with nested emphasis and balanced URL parentheses", () => {
+    for (const value of [
+      "[guide](https://example.com/guide)",
+      "**[guide](https://example.com/guide) and more**",
+      "[**bold** and *italic*](https://example.com/guide)",
+      "[guide](https://example.com/path\\(one\\))",
+      "https://example.com/_handle_/status/1",
+      "`[literal](https://example.com)`",
+    ])
+      expect(roundTrip(value).value).toBe(value);
+  });
+});
