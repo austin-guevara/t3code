@@ -843,14 +843,24 @@ export function PreviewView({
           return;
         case "copy-url":
           if (!url) return;
-          void writeTextToClipboard(url, "browser URL").catch(() => {
-            toastManager.add(
-              stackedThreadToast({
-                type: "error",
-                title: "Unable to copy browser URL",
-              }),
-            );
-          });
+          void writeTextToClipboard(url, "browser URL").then(
+            (didCopy) => {
+              if (didCopy)
+                toastManager.add({
+                  type: "success",
+                  title: "Browser URL copied",
+                  description: url,
+                });
+            },
+            () => {
+              toastManager.add(
+                stackedThreadToast({
+                  type: "error",
+                  title: "Unable to copy browser URL",
+                }),
+              );
+            },
+          );
           return;
         case "focus-url":
           urlInputRef.current?.focus();
