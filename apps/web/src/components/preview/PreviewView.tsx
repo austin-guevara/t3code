@@ -34,6 +34,7 @@ import { type ComposerImageAttachment, useComposerDraftStore } from "~/composerD
 import { capturePreviewAnnotationScreenshot } from "~/lib/previewAnnotation";
 import { ensureLocalApi } from "~/localApi";
 import { getClientSettings } from "~/hooks/useSettings";
+import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
 import {
   rememberPreviewUrl,
   updatePreviewServerSnapshot,
@@ -840,6 +841,17 @@ export function PreviewView({
         case "refresh":
           handleRefresh();
           return;
+        case "copy-url":
+          if (!url) return;
+          void writeTextToClipboard(url, "browser URL").catch(() => {
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Unable to copy browser URL",
+              }),
+            );
+          });
+          return;
         case "focus-url":
           urlInputRef.current?.focus();
           return;
@@ -863,6 +875,7 @@ export function PreviewView({
     const unsubscribeAction = subscribePreviewAction((action) => onPreviewAction(action));
     const unsubscribeMenu = window.desktopBridge?.onMenuAction((action) => {
       if (action === "preview.focusUrl") onPreviewAction("focus-url");
+      if (action === "preview.copyUrl") onPreviewAction("copy-url");
     });
     return () => {
       unsubscribeAction();

@@ -329,6 +329,21 @@ describe("PreviewView", () => {
     expect(listeners.size).toBe(0);
   });
 
+  it("copies the current tab URL through the action bus only while visible", async () => {
+    setup();
+    await using screen = await render(view());
+    using writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    const { dispatchPreviewAction } = await import("./previewActionBus");
+    await act(() => dispatchPreviewAction("copy-url"));
+    expect(writeText).toHaveBeenCalledWith("http://example.com/");
+    writeText.mockClear();
+    await screen.rerender(
+      <PreviewView threadRef={TEST_THREAD_REF} tabId="tab-1" visible={false} />,
+    );
+    await act(() => dispatchPreviewAction("copy-url"));
+    expect(writeText).not.toHaveBeenCalled();
+  });
+
   it("focuses the address bar each time the focus-url shortcut fires", async () => {
     setup();
     await using _screen = await render(view());

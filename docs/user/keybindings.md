@@ -46,6 +46,12 @@ on macOS and Ctrl on Windows and Linux, including GNOME, KDE Plasma, Niri, and
 Hyprland. If a custom desktop shortcut takes the same keys, choose another binding
 in Settings.
 
+## Copy the browser URL
+
+Bind **Preview: Copy URL** (`preview.copyUrl`) in Settings → Keybindings to copy the active
+browser tab’s current address. It has no default shortcut. Use `previewFocus` as the condition
+if you want a shortcut such as `mod+shift+c` to keep its existing behavior outside the browser.
+
 ## Copy pull request references
 
 With a PR open in the right panel or on the Pull requests page, use `mod+shift+c`
