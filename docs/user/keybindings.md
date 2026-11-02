@@ -48,9 +48,8 @@ in Settings.
 
 ## Copy the browser URL
 
-Bind **Preview: Copy URL** (`preview.copyUrl`) in Settings → Keybindings to copy the active
-browser tab’s current address. It has no default shortcut. Use `previewFocus` as the condition
-if you want a shortcut such as `mod+shift+c` to keep its existing behavior outside the browser.
+With the browser focused, `mod+shift+c` copies its current URL. Customize
+**Preview: Copy URL** (`preview.copyUrl`) in Settings → Keybindings.
 
 ## Copy pull request references
 

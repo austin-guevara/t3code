@@ -767,6 +767,24 @@ describe("isRichTextBoldShortcut", () => {
 });
 
 describe("composer and pull request shortcuts", () => {
+  it.each([
+    { previewFocus: true, terminalFocus: false, command: "preview.copyUrl" },
+    { previewFocus: false, terminalFocus: false, command: "thread.copyReference" },
+    { previewFocus: false, terminalFocus: true, command: null },
+  ] as const)("routes copy by focus: $command", ({ command, ...context }) => {
+    assert.strictEqual(
+      resolveShortcutCommand(
+        event({ key: "c", metaKey: true, shiftKey: true }),
+        DEFAULT_RESOLVED_KEYBINDINGS,
+        {
+          platform: "MacIntel",
+          context,
+        },
+      ),
+      command,
+    );
+  });
+
   it("fills missing number shortcuts without replacing the saved URL binding", () => {
     const olderServerBindings = DEFAULT_RESOLVED_KEYBINDINGS.filter(
       (binding) =>
