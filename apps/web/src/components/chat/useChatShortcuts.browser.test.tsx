@@ -1,12 +1,28 @@
-import type { KeybindingCommand, ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import {
+  DEFAULT_CLIENT_SETTINGS,
+  EnvironmentId,
+  ThreadId,
+  type ScopedThreadRef,
+  type KeybindingCommand,
+  type ResolvedKeybindingsConfig,
+} from "@t3tools/contracts";
 import { useEffect, useState } from "react";
 import { expect, it } from "vite-plus/test";
-import { userEvent } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 
+import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
+import { isMacPlatform } from "~/lib/utils";
+import { RightPanelTabs } from "../RightPanelTabs";
 import { surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
-import { render } from "../../../test/render";
+import { act, render } from "../../../test/render";
+import { __setClientSettingsForTests } from "../../hooks/useSettings";
+
 import type { ChatComposerHandle } from "./ChatComposer";
-import { useChatShortcuts } from "./useChatShortcuts";
+import { useChatShortcuts, type ChatShortcutCommands } from "./useChatShortcuts";
+import { useRightPanelActions } from "./useRightPanelActions";
+import { useDeviceState } from "../../state/device";
+import { useThreadPreviewState } from "../../previewStateStore";
+import { selectThreadRightPanelState, useRightPanelStore } from "../../rightPanelStore";
 
 const shortcutContext = {
   terminalFocus: false,
@@ -47,10 +63,15 @@ function Launcher(props: { keys: string; received: string[] }) {
 
 // The chat's shortcut listener registers when the chat mounts, so a launcher that opens
 // later registers after it. Tests mount the chat first and add the launcher by rerendering.
-function Chat(props: { composerKeys: string[]; launcher?: { keys: string; received: string[] } }) {
+function Chat(props: {
+  composerKeys: string[];
+  launcher?: { keys: string; received: string[] };
+  keybindings?: ResolvedKeybindingsConfig;
+  commands?: ChatShortcutCommands;
+}) {
   useChatShortcuts({
     enabled: true,
-    keybindings: [],
+    keybindings: props.keybindings ?? [],
     scriptKeybindings: [],
     getShortcutContext: () => shortcutContext,
     threadFindActive: false,
@@ -65,7 +86,7 @@ function Chat(props: { composerKeys: string[]; launcher?: { keys: string; receiv
     },
     branchToolbarRef: { current: null },
     closeThreadFind: () => {},
-    commands: {},
+    commands: props.commands ?? {},
     fallback: () => undefined,
   });
   return props.launcher ? <Launcher {...props.launcher} /> : null;
@@ -186,4 +207,114 @@ it("runs a side chat's composer chords only from its composer, and never thread 
 
   expect(toggles).toEqual(["model"]);
   expect(stops).toEqual([]);
+});
+
+function ClosedPanelChat({ threadRef }: { threadRef: ScopedThreadRef }) {
+  const panel = useRightPanelStore((state) =>
+    selectThreadRightPanelState(state.byThreadKey, threadRef),
+  );
+  const panelOpen = panel.isOpen;
+  const actions = useRightPanelActions({
+    activeThreadRef: threadRef,
+    activeProject: null,
+    activeRightPanelSurface: null,
+    activePreviewState: useThreadPreviewState(null),
+    deviceState: { ...useDeviceState(null).state, onboardingCompleted: true, hostStatus: "ready" },
+    deviceStateLoaded: true,
+    pullRequestPanelTarget: null,
+    threadPanelPresentation: "inline",
+    isServerThread: true,
+    embedded: false,
+    isGitRepo: false,
+    browserAvailable: false,
+    canOperatePreview: false,
+    diffOpen: false,
+    previewPanelOpen: false,
+    rightPanelOpen: panelOpen,
+    canMaximizeRightPanel: true,
+    rightPanelMaximized: false,
+    supportsPullRequests: false,
+    pullRequestsSurfaceAvailable: false,
+    gitCwd: null,
+    activeProjectCwd: null,
+    explicitDiffOpenRef: { current: null },
+    onDiffPanelOpen: undefined,
+    closeRightPanelSurface: () => {},
+  });
+  return (
+    <>
+      <Chat
+        composerKeys={[]}
+        commands={actions.shortcuts}
+        keybindings={DEFAULT_RESOLVED_KEYBINDINGS}
+      />
+      {panelOpen ? (
+        <RightPanelTabs
+          mode="inline"
+          open
+          newSurfaceMenu={actions.newSurfaceMenu}
+          keybindings={DEFAULT_RESOLVED_KEYBINDINGS}
+          getShortcutContext={() => shortcutContext}
+          surfaces={panel.surfaces}
+          environmentId={threadRef.environmentId}
+          activeSurfaceId={panel.activeSurfaceId}
+          pendingSurfaceIds={new Set()}
+          previewSessions={{}}
+          desktopByTabId={{}}
+          terminalLabelsById={new Map()}
+          onActivate={actions.activateRightPanelSurfaceStable}
+          onCloseSurface={() => {}}
+          onCloseOtherSurfaces={() => {}}
+          onCloseSurfacesToRight={() => {}}
+          onCloseAllSurfaces={() => useRightPanelStore.getState().closeAllSurfaces(threadRef)}
+          onCopyFilePath={actions.copyRightPanelFilePathStable}
+          onAddBrowser={() => actions.createBrowserSurface()}
+          onAddBrowserInProfile={actions.createBrowserSurfaceStable}
+          onAddTerminal={() => {}}
+          onAddDiff={actions.addDiffSurfaceStable}
+          onAddFiles={actions.addFilesSurfaceStable}
+          onAddPullRequest={actions.addPullRequestSurfaceStable}
+          onAddPullRequests={actions.addPullRequestsSurfaceStable}
+          onAddDevice={actions.addDeviceSurfaceStable}
+          browserAvailable={false}
+          terminalAvailable={false}
+          diffAvailable={false}
+          filesAvailable={false}
+          pullRequestAvailable={false}
+          pullRequestsAvailable={false}
+          deviceAvailable
+        >
+          {null}
+        </RightPanelTabs>
+      ) : null}
+    </>
+  );
+}
+
+it("opens the new-tab menu from a closed panel and preserves its letter shortcuts", async () => {
+  __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
+  const threadRef = {
+    environmentId: EnvironmentId.make("panel-shortcut-test"),
+    threadId: ThreadId.make("new-tab-menu"),
+  };
+  await using _screen = await render(<ClosedPanelChat threadRef={threadRef} />);
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => useRightPanelStore.getState().closeAllSurfaces(threadRef));
+  const readPanel = () =>
+    selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, threadRef);
+  const newTabShortcut = isMacPlatform(navigator.platform)
+    ? "{Meta>}t{/Meta}"
+    : "{Control>}t{/Control}";
+  expect(readPanel().isOpen).toBe(false);
+  await userEvent.keyboard(newTabShortcut);
+  await expect.element(page.getByRole("menu")).toBeVisible();
+  expect(readPanel().surfaces).toEqual([]);
+  await userEvent.keyboard("m");
+  expect(readPanel().surfaces.map((surface) => surface.kind)).toEqual(["device"]);
+  await act(() => useRightPanelStore.getState().close(threadRef));
+  await userEvent.keyboard(newTabShortcut);
+  await expect.element(page.getByRole("menu")).toBeVisible();
+  expect(readPanel().isOpen).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await expect.element(page.getByRole("menu")).not.toBeInTheDocument();
 });

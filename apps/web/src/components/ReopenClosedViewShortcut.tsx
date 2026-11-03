@@ -48,6 +48,7 @@ const PREVIEW_FORWARDED_COMMANDS = [
   "workspace.focusPrevious",
   "sidebar.toggle",
   "rightPanel.toggle",
+  "rightPanel.new",
   "rightPanel.toggleMaximized",
   "preview.focusUrl",
 ] as const;
@@ -71,6 +72,9 @@ export function ReopenClosedViewShortcut() {
   const terminalOpen = useTerminalUiStateStore(
     (state) =>
       selectThreadTerminalUiState(state.terminalUiStateByThreadKey, threadRef).terminalOpen,
+  );
+  const rightPanelOpen = useRightPanelStore(
+    (state) => selectThreadRightPanelState(state.byThreadKey, threadRef).isOpen,
   );
   const previewOpen = useRightPanelStore(
     (state) => selectActiveRightPanel(state.byThreadKey, threadRef) === "preview",
@@ -195,6 +199,7 @@ export function ReopenClosedViewShortcut() {
       context: {
         previewFocus: true,
         previewOpen: true,
+        rightPanelOpen,
         terminalFocus: false,
         terminalOpen,
         editableFocus: false,
@@ -221,7 +226,7 @@ export function ReopenClosedViewShortcut() {
     return () => {
       void preview.setForwardedShortcuts([]).catch(() => undefined);
     };
-  }, [hasHistory, keybindings, terminalOpen]);
+  }, [hasHistory, keybindings, terminalOpen, rightPanelOpen]);
 
   return null;
 }

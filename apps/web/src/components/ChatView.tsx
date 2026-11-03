@@ -2358,6 +2358,7 @@ export default function ChatView(props: ChatViewProps) {
     toggleRightPanelStable,
     toggleThreadPanelStable,
     shortcuts: rightPanelShortcuts,
+    newSurfaceMenu,
   } = useRightPanelActions({
     activeThreadRef,
     activeProject,
@@ -2662,6 +2663,7 @@ export default function ChatView(props: ChatViewProps) {
     terminalOpen: Boolean(terminalUiState.terminalOpen),
     previewFocus: isPreviewFocused(),
     previewOpen: previewPanelOpen,
+    rightPanelOpen,
     editableFocus: isEditableFocused(eventTarget),
     modelPickerOpen: composerRef.current?.isModelPickerOpen() ?? false,
     composerFocus:
@@ -3945,6 +3947,7 @@ export default function ChatView(props: ChatViewProps) {
           sheetAnimationDurationMs={panelAnimationsActive ? panelAnimationDurationMs : 0}
           onCloseSheet={closePreviewPanelStable}
           open={rightPanelOpen}
+          newSurfaceMenu={newSurfaceMenu}
           keybindings={keybindings}
           getShortcutContext={getShortcutContextStable}
           maximized={rightPanelMaximized}

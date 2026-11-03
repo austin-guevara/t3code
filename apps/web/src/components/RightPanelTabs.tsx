@@ -103,12 +103,13 @@ import { PierreEntryIcon } from "./chat/PierreEntryIcon";
 import { resolvePullRequestState } from "./pullRequest/pullRequestPresentation";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { observeResize } from "~/lib/observeResize";
-import { surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
+import { LAUNCHER_SHORTCUT_BLOCKING_LAYERS, surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
 
 export interface RightPanelTabsProps {
   mode: PreviewPanelMode;
   maximized?: boolean;
   open?: boolean;
+  newSurfaceMenu?: { open: boolean; onOpenChange: (open: boolean) => void };
   keybindings: ResolvedKeybindingsConfig;
   getShortcutContext: () => ShortcutMatchContext;
   widthStorageKey?: string;
@@ -181,20 +182,6 @@ const SURFACE_DISABLED_REASONS = {
   device: "Devices are only available from a thread.",
   sideChat: "Side chats start after the first message.",
 } as const;
-
-// Closed keepMounted popups must stop blocking shortcuts once their exit transition ends.
-const LAUNCHER_SHORTCUT_BLOCKING_LAYERS = [
-  "dialog-popup",
-  "alert-dialog-popup",
-  "command-dialog-popup",
-  "menu-popup",
-  "select-popup",
-  "popover-popup",
-  "combobox-popup",
-  "autocomplete-popup",
-]
-  .map((slot) => `[data-slot="${slot}"]:is([data-open],[data-ending-style])`)
-  .join(",");
 
 const SURFACE_UNAVAILABLE_HINTS = {
   browser: "Only available in the desktop app.",
@@ -1030,14 +1017,17 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   const tabListRef = useRef<HTMLDivElement>(null);
   const addSurfaceTriggerRef = useRef<HTMLButtonElement>(null);
   const [renamingDevice, setRenamingDevice] = useState<string | null>(null);
-  const [addSurfaceMenuOpen, setAddSurfaceMenuOpen] = useState(false);
+  const [localMenuOpen, setLocalMenuOpen] = useState(false);
+  const managedMenu = props.newSurfaceMenu !== undefined;
+  const addSurfaceMenuOpen = props.open !== false && (props.newSurfaceMenu?.open ?? localMenuOpen);
+  const setAddSurfaceMenuOpen = props.newSurfaceMenu?.onOpenChange ?? setLocalMenuOpen;
   const [tabScrollState, setTabScrollState] = useState({
     hasOverflow: false,
     canScrollLeft: false,
     canScrollRight: false,
   });
 
-  if (props.open === false && addSurfaceMenuOpen) setAddSurfaceMenuOpen(false);
+  if (props.open === false && localMenuOpen) setLocalMenuOpen(false);
 
   const onNewSurfaceKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || event.isComposing) return;
@@ -1057,10 +1047,10 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes a document keydown listener for the new surface shortcut while the panel is open
   useEffect(() => {
-    if (props.open === false) return;
+    if (props.open === false || managedMenu) return;
     document.addEventListener("keydown", onNewSurfaceKeyDown, true);
     return () => document.removeEventListener("keydown", onNewSurfaceKeyDown, true);
-  }, [props.open]);
+  }, [props.open, managedMenu]);
 
   const updateTabScrollState = (viewport: HTMLDivElement) => {
     const hasOverflow = viewport.scrollWidth - viewport.clientWidth > TAB_SCROLL_EDGE_TOLERANCE;

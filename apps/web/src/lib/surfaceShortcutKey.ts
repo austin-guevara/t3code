@@ -12,3 +12,17 @@ export function surfaceShortcutKey(event: SurfaceKeyEvent): string | null {
       : undefined;
   return physical ?? typed;
 }
+
+// Closed keepMounted popups must stop blocking shortcuts once their exit transition ends.
+export const LAUNCHER_SHORTCUT_BLOCKING_LAYERS = [
+  "dialog-popup",
+  "alert-dialog-popup",
+  "command-dialog-popup",
+  "menu-popup",
+  "select-popup",
+  "popover-popup",
+  "combobox-popup",
+  "autocomplete-popup",
+]
+  .map((slot) => `[data-slot="${slot}"]:is([data-open],[data-ending-style])`)
+  .join(",");

@@ -7,7 +7,7 @@ import { resolveExplicitDiffOpenOnActivate } from "../ChatView.logic";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { type ScopedThreadRef, type RunId } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -34,6 +34,7 @@ import { stackedThreadToast, toastManager } from "../ui/toast";
 import { openDeviceSetupDialog } from "./ChatOverlayHosts";
 import { previewEnvironment } from "../../state/preview";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { LAUNCHER_SHORTCUT_BLOCKING_LAYERS } from "../../lib/surfaceShortcutKey";
 import type { ChatShortcutCommands } from "./useChatShortcuts";
 interface RightPanelActionsInput {
   readonly activeThreadRef: ScopedThreadRef | null;
@@ -96,6 +97,10 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     explicitDiffOpenRef,
     onDiffPanelOpen,
   } = input;
+
+  const [newSurfaceMenuOpen, setNewSurfaceMenuOpen] = useState(false);
+  if (!rightPanelOpen && newSurfaceMenuOpen) setNewSurfaceMenuOpen(false);
+  const newSurfaceMenu = { open: newSurfaceMenuOpen, onOpenChange: setNewSurfaceMenuOpen };
 
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const onToggleDiff = () => {
@@ -328,6 +333,18 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
   );
 
   const shortcuts = {
+    "rightPanel.new": ({ event }) => {
+      if (
+        !activeThreadRef ||
+        event.isComposing ||
+        (!newSurfaceMenuOpen && document.querySelector(LAUNCHER_SHORTCUT_BLOCKING_LAYERS))
+      )
+        return false;
+      if (!event.repeat) {
+        useRightPanelStore.getState().show(activeThreadRef);
+        setNewSurfaceMenuOpen(true);
+      }
+    },
     "rightPanel.toggle": () => toggleRightPanel(),
     "rightPanel.toggleMaximized": ({ event }) => {
       if (!event.repeat) toggleRightPanelMaximized();
@@ -342,6 +359,7 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
 
   return {
     shortcuts,
+    newSurfaceMenu,
     activateRightPanelSurfaceStable,
     addDeviceSurfaceStable,
     addDiffSurfaceStable,
