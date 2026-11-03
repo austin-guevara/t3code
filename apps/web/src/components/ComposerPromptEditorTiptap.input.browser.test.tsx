@@ -437,3 +437,34 @@ describe("an Arabic line", () => {
     );
   });
 });
+
+it("pastes a URL onto selected text as a rendered link and restores its destination", async () => {
+  await using screen = await mountEditor("read the guide");
+  const { editor } = screen;
+  await act(() => {
+    editor.commands.setTextSelection({ from: 10, to: 15 });
+    const clipboardData = new DataTransfer();
+    clipboardData.setData("text/plain", "https://example.com/guide");
+    editor.view.dom.dispatchEvent(new ClipboardEvent("paste", { clipboardData, cancelable: true }));
+  });
+  expect(serializeEditorDoc(editor.state.doc).value).toBe(
+    "read the [guide](https://example.com/guide)",
+  );
+  expect(editor.view.dom.querySelector("a")?.getAttribute("href")).toBe(
+    "https://example.com/guide",
+  );
+  expect(editor.view.dom.querySelector("img.composer-link-favicon")?.getAttribute("alt")).toBe("");
+  await screen.rerender(
+    <Composer
+      key="restored"
+      value="read the [guide](https://example.com/guide)"
+      richTextEnabled
+      skills={[]}
+    />,
+  );
+  const restored = editorIn(screen.container);
+  expect(restored.view.dom.querySelector("a")?.textContent).toContain("guide");
+  expect(serializeEditorDoc(restored.state.doc).value).toBe(
+    "read the [guide](https://example.com/guide)",
+  );
+});

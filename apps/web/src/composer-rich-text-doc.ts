@@ -19,6 +19,7 @@ import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
 import { Italic, starInputRegex, starPasteRegex } from "@tiptap/extension-italic";
 import {
   type Command,
+  type JSONContent,
   type Editor,
   Extension,
   InputRule,
@@ -42,7 +43,12 @@ import { ReplaceStep } from "@tiptap/pm/transform";
 
 import { splitPromptIntoComposerSegments } from "~/composer-editor-mentions";
 import { nextOrderedMarkerText } from "~/composer-list-continuation";
-import { parseInlineMarkdown, RICH_TEXT_DELIMITERS, type RichTextMark } from "~/composer-rich-text";
+import {
+  composerLinkRanges,
+  parseInlineMarkdown,
+  RICH_TEXT_DELIMITERS,
+  type RichTextMark,
+} from "~/composer-rich-text";
 import { collectInlineContextIds } from "~/lib/composerContextReferences";
 import { composerMathRanges } from "@t3tools/shared/composerInlineTokens";
 
@@ -682,12 +688,13 @@ function listJson(list: PendingList): InlineJson {
   return { type: "bulletList", content: items };
 }
 
-function textJsonForSpan(text: string, marks: RichTextMark[]): Record<string, unknown> {
-  const json: Record<string, unknown> = { type: "text", text };
-  if (marks.length > 0) {
+function textJsonForSpan(text: string, marks: RichTextMark[], href?: string): JSONContent {
+  const json: JSONContent = { type: "text", text };
+  if (marks.length > 0 || href) {
     json.marks = [...marks]
       .sort((a, b) => MARK_NESTING_ORDER.indexOf(a) - MARK_NESTING_ORDER.indexOf(b))
       .map((mark) => ({ type: MARK_TO_TIPTAP[mark] }));
+    if (href) json.marks.push({ type: "link", attrs: { href } });
   }
   return json;
 }
@@ -714,7 +721,11 @@ export function buildTiptapContent(
   const atomSources: string[] = [];
   const literal = value.slice(0, options?.literalLength ?? 0);
   const remainder = value.slice(literal.length);
-  const formulas = composerMathRanges(remainder);
+  const math = composerMathRanges(remainder);
+  const links = styling && math.length > 0 ? composerLinkRanges(remainder) : [];
+  const formulas = math.filter(
+    (formula) => !links.some((link) => formula.start >= link.start && formula.end <= link.end),
+  );
   let offset = 0;
   const chunks: Array<{ text: string } | { source: string }> = [];
   for (const formula of formulas) {
@@ -745,7 +756,9 @@ export function buildTiptapContent(
     .join("");
   let atomIndex = 0;
   const buildInline = (content: string): InlineJson[] => {
-    const spans = styling ? parseInlineMarkdown(content) : [{ text: content, marks: [] }];
+    const spans = styling
+      ? parseInlineMarkdown(content)
+      : [{ text: content, marks: [], href: undefined }];
     const inline: InlineJson[] = [];
     for (const span of spans) {
       span.text.split(sentinel).forEach((piece, index) => {
@@ -753,7 +766,7 @@ export function buildTiptapContent(
           const atom = atoms[atomIndex++]!;
           inline.push({ ...atom, marks: textJsonForSpan("", span.marks).marks });
         }
-        if (piece) inline.push(textJsonForSpan(piece, span.marks));
+        if (piece) inline.push(textJsonForSpan(piece, span.marks, span.href));
       });
     }
     return inline;
@@ -1041,8 +1054,15 @@ function appendInlineRuns(
     const text = child.text!;
     const start = text.length - text.trimStart().length;
     const end = Math.max(start, text.trimEnd().length);
+    const boundaries = new Set([start, end, text.length]);
+    if (child.marks.some((mark) => mark.type.name === "link")) {
+      for (const match of text.matchAll(/[\\[\]]/g)) {
+        boundaries.add(match.index);
+        boundaries.add(match.index + 1);
+      }
+    }
     let offset = 0;
-    for (const boundary of [start, end, text.length]) {
+    for (const boundary of [...boundaries].sort((a, b) => a - b)) {
       if (boundary > offset) children.push(child.cut(offset, boundary));
       offset = boundary;
     }
@@ -1075,36 +1095,50 @@ function appendInlineRuns(
       }
     }
   }
-  const markEnds = new Map<RichTextMark, number>();
-  const orderedMarks: RichTextMark[][] = [];
+  type LinkMark = { href: string };
+  type InlineMark = RichTextMark | LinkMark;
+  const links = new Map<string, LinkMark>();
+  const linkMark = (href: string) => {
+    let mark = links.get(href);
+    if (!mark) links.set(href, (mark = { href }));
+    return mark;
+  };
+  const markOrder = (mark: InlineMark) =>
+    typeof mark === "string" ? MARK_NESTING_ORDER.indexOf(mark) : -1;
+  const markEnds = new Map<InlineMark, number>();
+  const orderedMarks: InlineMark[][] = [];
   for (let index = children.length - 1; index >= 0; index -= 1) {
     const child = children[index]!;
     const marks =
       child.type.name === "hardBreak"
         ? []
         : child.marks
-            .map((mark) => TIPTAP_TO_MARK[mark.type.name])
-            .filter((mark): mark is RichTextMark => Boolean(mark));
-    for (const mark of MARK_NESTING_ORDER) {
+            .map((mark): InlineMark | undefined =>
+              mark.type.name === "link"
+                ? child.text === mark.attrs.href
+                  ? undefined
+                  : linkMark(String(mark.attrs.href))
+                : TIPTAP_TO_MARK[mark.type.name],
+            )
+            .filter((mark): mark is InlineMark => Boolean(mark));
+    for (const mark of new Set([...markEnds.keys(), ...marks])) {
       if (!marks.includes(mark)) markEnds.delete(mark);
       else if (!markEnds.has(mark)) markEnds.set(mark, index);
     }
     orderedMarks[index] = marks.sort(
-      (a, b) =>
-        markEnds.get(b)! - markEnds.get(a)! ||
-        MARK_NESTING_ORDER.indexOf(a) - MARK_NESTING_ORDER.indexOf(b),
+      (a, b) => markEnds.get(b)! - markEnds.get(a)! || markOrder(a) - markOrder(b),
     );
   }
   for (let index = 1; index < orderedMarks.length; index += 1) {
     const marks = orderedMarks[index]!;
-    const retained: RichTextMark[] = [];
+    const retained: InlineMark[] = [];
     for (const mark of orderedMarks[index - 1]!) {
       if (!marks.includes(mark)) break;
       retained.push(mark);
     }
     orderedMarks[index] = [...retained, ...marks.filter((mark) => !retained.includes(mark))];
   }
-  const commonLength = (left: RichTextMark[], right: RichTextMark[]) => {
+  const commonLength = (left: InlineMark[], right: InlineMark[]) => {
     let index = 0;
     while (index < left.length && left[index] === right[index]) index += 1;
     return index;
@@ -1120,22 +1154,33 @@ function appendInlineRuns(
     const marks = orderedMarks[index]!;
     const open = marks
       .slice(commonLength(marks, orderedMarks[index - 1] ?? []))
-      .map((mark) => RICH_TEXT_DELIMITERS[mark])
+      .map((mark) => (typeof mark === "string" ? RICH_TEXT_DELIMITERS[mark] : "["))
       .join("");
     const close = marks
       .slice(commonLength(marks, orderedMarks[index + 1] ?? []))
       .toReversed()
-      .map((mark) => RICH_TEXT_DELIMITERS[mark])
+      .map((mark) =>
+        typeof mark === "string"
+          ? RICH_TEXT_DELIMITERS[mark]
+          : `](${mark.href.replace(/[()\\]/g, "\\$&")})`,
+      )
       .join("");
     const source = child.isText ? child.text! : readAtomSource(child);
     const docLen = child.isText ? source.length : 1;
-    const mdText = open + source + close;
+    const escape =
+      child.isText &&
+      !marks.includes("code") &&
+      marks.some((mark) => typeof mark !== "string") &&
+      /^[\\[\]]$/.test(source)
+        ? "\\"
+        : "";
+    const mdText = open + escape + source + close;
     acc.runs.push({
       kind: child.isText ? "text" : "token",
       flatStart: acc.flat,
       docLen,
       mdLen: mdText.length,
-      openLen: open.length,
+      openLen: open.length + escape.length,
       closeLen: close.length,
       pmPos,
       mdStart: acc.md,

@@ -30,6 +30,10 @@ at the end, leave the block. **Backspace** at the start of a code block turns it
 back into plain lines. Choose the language in a code block's corner to change
 it. Very large code blocks are shown without syntax highlighting.
 
+Links appear with their labels and inline favicons in the rich text composer.
+Select text and paste a URL to make that selection a link. The message keeps the label
+and destination as Markdown, including when you reopen the draft.
+
 ## Attach files
 
 Attach up to 100 files per message. Each image can be up to 10 MiB, with at most
