@@ -26,6 +26,11 @@ import {
   isVideoAttachment,
 } from "../../types";
 import ChatMarkdown from "../ChatMarkdown";
+import { useClientSettings } from "../../hooks/useSettings";
+import { remarkSlackEmphasis } from "../../markdownEmphasis";
+
+const SLACK_EMPHASIS_PLUGINS = [remarkSlackEmphasis];
+const COMMONMARK_EMPHASIS_PLUGINS: typeof SLACK_EMPHASIS_PLUGINS = [];
 import {
   CalendarClockIcon,
   ChevronDownIcon,
@@ -1180,12 +1185,16 @@ const UserMessageBody = memo(function UserMessageBody(props: {
   markdownCwd: string | undefined;
 }) {
   const ctx = use(TimelineRowCtx);
+  const emphasisStyle = useClientSettings((settings) => settings.composerEmphasisStyle);
   if (props.text.length === 0) {
     return null;
   }
   return (
     <ChatMarkdown
       text={props.text}
+      extraRemarkPlugins={
+        emphasisStyle === "slack" ? SLACK_EMPHASIS_PLUGINS : COMMONMARK_EMPHASIS_PLUGINS
+      }
       cwd={props.markdownCwd}
       threadRef={ctx.threadRef ?? undefined}
       skills={props.skills}

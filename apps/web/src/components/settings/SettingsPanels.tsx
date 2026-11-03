@@ -525,7 +525,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       ? ["Rich text composer"]
       : []),
     ...(settings.composerEmphasisStyle !== DEFAULT_UNIFIED_SETTINGS.composerEmphasisStyle
-      ? ["Emphasis syntax"]
+      ? ["Emphasis rendering"]
       : []),
     ...(settings.sendShortcut !== DEFAULT_UNIFIED_SETTINGS.sendShortcut ? ["Send shortcut"] : []),
     ...(settings.followUpBehavior !== DEFAULT_UNIFIED_SETTINGS.followUpBehavior
@@ -1117,11 +1117,11 @@ export function ChatSettingsPanel() {
         />
         <SettingsRow
           {...searchableSetting("composer-emphasis-style")}
-          description="Choose bold and italic input syntax. Sent messages use standard Markdown."
+          description="Choose how emphasis appears in the composer and your messages. Text is sent as typed."
           resetAction={
             settings.composerEmphasisStyle !== DEFAULT_UNIFIED_SETTINGS.composerEmphasisStyle ? (
               <SettingResetButton
-                label="emphasis syntax"
+                label="emphasis rendering"
                 onClick={() =>
                   updateSettings({
                     composerEmphasisStyle: DEFAULT_UNIFIED_SETTINGS.composerEmphasisStyle,
@@ -1133,13 +1133,12 @@ export function ChatSettingsPanel() {
           control={
             <Select
               value={settings.composerEmphasisStyle}
-              disabled={!settings.composerRichTextEnabled}
               onValueChange={(value) => {
                 if (value === "commonmark" || value === "slack")
                   updateSettings({ composerEmphasisStyle: value });
               }}
             >
-              <SelectTrigger aria-label="Emphasis syntax">
+              <SelectTrigger aria-label="Emphasis rendering">
                 <SelectValue />
               </SelectTrigger>
               <SelectPopup>

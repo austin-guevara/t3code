@@ -59,6 +59,7 @@ import {
 } from "~/composer-logic";
 import { useStableCallback } from "~/hooks/useStableCallback";
 import type { ComposerEmphasisStyle } from "~/composer-rich-text";
+import { markdownEmphasisRanges } from "~/markdownEmphasis";
 import { caretLineDirection, ComposerTextDirectionExtension } from "~/composer-text-direction";
 import {
   collectComposerPromptInlineTokens,
@@ -76,8 +77,6 @@ import {
   ComposerCodeExtension,
   ComposerBoldExtension,
   ComposerItalicExtension,
-  ComposerSlackBoldExtension,
-  ComposerSlackItalicExtension,
   ComposerStrikeExtension,
   ComposerTaskItemExtension,
   ComposerTaskListExtension,
@@ -757,6 +756,76 @@ const ComposerMarkersExtension = Extension.create({
   },
 });
 
+const ComposerEmphasisExtension = Extension.create<{ style: ComposerEmphasisStyle }>({
+  name: "composer-visual-emphasis",
+  addOptions: () => ({ style: "commonmark" }),
+  addProseMirrorPlugins() {
+    const style = this.options.style;
+    const key = new PluginKey<DecorationSet>("composer-visual-emphasis");
+    const cachedRanges = new WeakMap<ProseMirrorNode, ReturnType<typeof markdownEmphasisRanges>>();
+    const decorations = (doc: ProseMirrorNode) => {
+      const ranges: Decoration[] = [];
+      doc.descendants((node, pos) => {
+        if (node.type.spec.code) return false;
+        if (!node.isTextblock) return;
+        let emphasis = cachedRanges.get(node);
+        if (!emphasis) {
+          let text = node.textBetween(0, node.content.size, undefined, "\uFFFC");
+          node.forEach((child, offset) => {
+            if (child.marks.some((mark) => mark.type.spec.code))
+              text =
+                text.slice(0, offset) +
+                "x".repeat(child.nodeSize) +
+                text.slice(offset + child.nodeSize);
+          });
+          emphasis = markdownEmphasisRanges(text, style);
+          cachedRanges.set(node, emphasis);
+        }
+        for (const range of emphasis)
+          ranges.push(
+            Decoration.inline(pos + 1 + range.from, pos + 1 + range.to, { nodeName: range.tag }),
+          );
+        return false;
+      });
+      return DecorationSet.create(doc, ranges);
+    };
+    return [
+      new Plugin({
+        key,
+        state: {
+          init: (_, state) => decorations(state.doc),
+          apply: (tr, old, _, state) => (tr.docChanged ? decorations(state.doc) : old),
+        },
+        props: { decorations: (state) => key.getState(state) },
+      }),
+    ];
+  },
+});
+
+function visualEmphasisExtensions(style: ComposerEmphasisStyle) {
+  return [ComposerItalicExtension, ComposerBoldExtension].map((extension) =>
+    extension.extend({
+      addAttributes() {
+        return {
+          sourceDelimiter: {
+            default:
+              extension.name === "bold"
+                ? style === "slack"
+                  ? "*"
+                  : "**"
+                : style === "slack"
+                  ? "_"
+                  : "*",
+            rendered: false,
+          },
+        };
+      },
+      addInputRules: () => [],
+      addPasteRules: () => [],
+    }),
+  );
+}
+
 type TiptapEditor = NonNullable<ReturnType<typeof useEditor>>;
 
 function replaceSkillChips(
@@ -853,8 +922,8 @@ function createComposerExtensions(
     ...(richText
       ? [
           ComposerBoldSelectionOnlyExtension,
-          emphasisStyle === "slack" ? ComposerSlackItalicExtension : ComposerItalicExtension,
-          emphasisStyle === "slack" ? ComposerSlackBoldExtension : ComposerBoldExtension,
+          ...visualEmphasisExtensions(emphasisStyle),
+          ComposerEmphasisExtension.configure({ style: emphasisStyle }),
           ComposerStrikeExtension,
           ComposerCodeExtension,
           ComposerCodeBlockExtension.extend({
@@ -1122,6 +1191,7 @@ function ComposerPromptEditorTiptapInner(
       content: buildDocJson(value, (name) => composerSkillMeta(skills, name), {
         styling: richText,
         literalText,
+        emphasis: false,
       }),
       editable: !disabled,
       editorProps: {
@@ -1413,7 +1483,7 @@ function ComposerPromptEditorTiptapInner(
             insertMarkdownParagraphs(
               text,
               skillLabelFor,
-              { styling: richText, blocks: !nested, literalText, literalLength, emphasisStyle },
+              { styling: richText, blocks: !nested, literalText, literalLength, emphasis: false },
               (content) => {
                 editorInstance
                   .chain()
@@ -1569,7 +1639,7 @@ function ComposerPromptEditorTiptapInner(
     if (previousSnapshot.value !== value) {
       saveCitationDraft(editor, previousSnapshot.value);
       editor.commands.setContent(
-        buildDocJson(value, skillLabelFor, { styling: richText, literalText }),
+        buildDocJson(value, skillLabelFor, { styling: richText, literalText, emphasis: false }),
         {
           emitUpdate: false,
         },
@@ -1857,7 +1927,7 @@ function insertMarkdownParagraphs(
     blocks?: boolean;
     literalText?: boolean;
     literalLength?: number;
-    emphasisStyle?: ComposerEmphasisStyle;
+    emphasis?: boolean;
   },
   insertContent: (content: JSONContent[] | JSONContent) => void,
 ): void {

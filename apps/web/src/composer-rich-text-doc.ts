@@ -42,12 +42,7 @@ import { ReplaceStep } from "@tiptap/pm/transform";
 
 import { splitPromptIntoComposerSegments } from "~/composer-editor-mentions";
 import { nextOrderedMarkerText } from "~/composer-list-continuation";
-import {
-  parseInlineMarkdown,
-  RICH_TEXT_DELIMITERS,
-  type RichTextMark,
-  type ComposerEmphasisStyle,
-} from "~/composer-rich-text";
+import { parseInlineMarkdown, RICH_TEXT_DELIMITERS, type RichTextMark } from "~/composer-rich-text";
 import { collectInlineContextIds } from "~/lib/composerContextReferences";
 import { composerMathRanges } from "@t3tools/shared/composerInlineTokens";
 
@@ -294,24 +289,6 @@ export const ComposerBoldExtension = Bold.extend({
       markInputRuleOutsideCode(boldStarInputRegex, this.type),
       markInputRuleOutsideCode(boldUnderscoreInputRegex, this.type),
     ];
-  },
-});
-
-export const ComposerSlackBoldExtension = ComposerBoldExtension.extend({
-  addInputRules() {
-    return [markInputRuleOutsideCode(/(?:^|\s)(\*([^*\n]+)\*)$/, this.type)];
-  },
-  addPasteRules() {
-    return [];
-  },
-});
-
-export const ComposerSlackItalicExtension = ComposerItalicExtension.extend({
-  addInputRules() {
-    return [markInputRuleOutsideCode(/(?:^|\s)(_([^_\n]+)_)$/, this.type)];
-  },
-  addPasteRules() {
-    return [];
   },
 });
 
@@ -724,7 +701,7 @@ export function buildTiptapContent(
     blocks?: boolean;
     literalText?: boolean;
     literalLength?: number;
-    emphasisStyle?: ComposerEmphasisStyle;
+    emphasis?: boolean;
   },
 ): Record<string, unknown>[] {
   if (options?.literalText) {
@@ -775,7 +752,7 @@ export function buildTiptapContent(
   let atomIndex = 0;
   const buildInline = (content: string): InlineJson[] => {
     const spans = styling
-      ? parseInlineMarkdown(content, options?.emphasisStyle)
+      ? parseInlineMarkdown(content, options?.emphasis)
       : [{ text: content, marks: [] }];
     const inline: InlineJson[] = [];
     for (const span of spans) {
@@ -965,7 +942,7 @@ export function buildTiptapContent(
 export function buildDocJson(
   value: string,
   skillLabelFor: (name: string) => SkillMeta | null,
-  options?: { styling?: boolean; literalText?: boolean },
+  options?: { styling?: boolean; literalText?: boolean; emphasis?: boolean },
 ) {
   const content = buildTiptapContent(value, skillLabelFor, options);
   if (content.at(-1)?.type === "horizontalRule") content.push({ type: "paragraph" });
@@ -1149,14 +1126,19 @@ function appendInlineRuns(
       return;
     }
     const marks = orderedMarks[index]!;
+    const delimiter = (mark: RichTextMark) => {
+      const source = child.marks.find((item) => item.type.name === MARK_TO_TIPTAP[mark])?.attrs
+        .sourceDelimiter;
+      return typeof source === "string" ? source : RICH_TEXT_DELIMITERS[mark];
+    };
     const open = marks
       .slice(commonLength(marks, orderedMarks[index - 1] ?? []))
-      .map((mark) => RICH_TEXT_DELIMITERS[mark])
+      .map(delimiter)
       .join("");
     const close = marks
       .slice(commonLength(marks, orderedMarks[index + 1] ?? []))
       .toReversed()
-      .map((mark) => RICH_TEXT_DELIMITERS[mark])
+      .map(delimiter)
       .join("");
     const source = child.isText ? child.text! : readAtomSource(child);
     const docLen = child.isText ? source.length : 1;

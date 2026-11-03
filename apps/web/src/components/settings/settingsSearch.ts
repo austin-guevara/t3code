@@ -590,7 +590,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "composer-emphasis-style",
-    title: "Emphasis syntax",
+    title: "Emphasis rendering",
     to: "/settings/chat",
     searchTerms: ["slack commonmark bold italic asterisk underscore markdown"],
   },
