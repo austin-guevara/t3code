@@ -51,8 +51,6 @@ interface RightPanelActionsInput {
   readonly isGitRepo: boolean;
   readonly browserAvailable: boolean;
   readonly canOperatePreview: boolean;
-  readonly canOperateTerminal: boolean;
-  readonly onAddTerminal: () => void;
   readonly diffOpen: boolean;
   readonly previewPanelOpen: boolean;
   readonly rightPanelOpen: boolean;
@@ -117,15 +115,13 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     }
   };
   const onToggleDiffStable = useStableCallback(onToggleDiff);
-  const createBrowserSurface = (profileId?: string, focusUrl = false) => {
+  const createBrowserSurface = (profileId?: string) => {
     if (!activeThreadRef || !canOperatePreview) return;
     void addBrowserSurface({
       threadRef: activeThreadRef,
       openPreview,
       ...(profileId === undefined ? {} : { profileId }),
     }).then((result) => {
-      if (result._tag === "Success" && focusUrl)
-        requestWorkspaceFocus({ area: "panel", selector: "[data-preview-url-input]" });
       if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
       const error = squashAtomCommandFailure(result);
       if (error instanceof BrowserSettingsReadError) {
@@ -336,18 +332,6 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     [embedded, togglePreviewPanelStable],
   );
 
-  const openSurface =
-    (available: boolean, open: () => void) =>
-    ({ event }: Parameters<NonNullable<ChatShortcutCommands["rightPanel.toggle"]>>[0]) => {
-      if (
-        !activeThreadRef ||
-        !available ||
-        document.querySelector(LAUNCHER_SHORTCUT_BLOCKING_LAYERS)
-      )
-        return false;
-      if (!event.repeat) open();
-    };
-
   const shortcuts = {
     "rightPanel.new": ({ event }) => {
       if (
@@ -361,24 +345,6 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
         setNewSurfaceMenuOpen(true);
       }
     },
-    "rightPanel.openBrowser": openSurface(canOperatePreview && browserAvailable, () =>
-      createBrowserSurface(undefined, true),
-    ),
-    "rightPanel.openTerminal": openSurface(
-      activeProject !== null && input.canOperateTerminal,
-      input.onAddTerminal,
-    ),
-    "rightPanel.openFiles": openSurface(activeProject !== null, addFilesSurface),
-    "rightPanel.openDiff": openSurface(isServerThread && isGitRepo, addDiffSurface),
-    "rightPanel.openPullRequest": openSurface(
-      supportsPullRequests && pullRequestPanelTarget !== null,
-      addPullRequestSurface,
-    ),
-    "rightPanel.openLinkedPullRequests": openSurface(
-      pullRequestsSurfaceAvailable,
-      addPullRequestsSurface,
-    ),
-    "rightPanel.openDevice": openSurface(activeThreadRef !== null, addDeviceSurface),
     "rightPanel.toggle": () => toggleRightPanel(),
     "rightPanel.toggleMaximized": ({ event }) => {
       if (!event.repeat) toggleRightPanelMaximized();

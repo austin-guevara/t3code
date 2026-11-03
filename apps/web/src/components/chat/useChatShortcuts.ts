@@ -93,14 +93,9 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
     event.stopPropagation();
   });
   const handleMenuAction = useEffectEvent((command: string) => {
-    if (
-      !input.enabled ||
-      embedded ||
-      isCommandPaletteOpen() ||
-      (command !== "rightPanel.new" && !command.startsWith("rightPanel.open"))
-    )
+    if (!input.enabled || embedded || isCommandPaletteOpen() || command !== "rightPanel.new")
       return;
-    input.commands[command as KeybindingCommand]?.({
+    input.commands[command]?.({
       event: new KeyboardEvent("keydown"),
       terminalFocusOwner: null,
     });

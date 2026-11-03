@@ -7,7 +7,7 @@ import {
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import { useEffect, useState } from "react";
-import { expect, it, vi } from "vite-plus/test";
+import { expect, it } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
@@ -15,13 +15,8 @@ import { isMacPlatform } from "~/lib/utils";
 import { RightPanelTabs } from "../RightPanelTabs";
 import { surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
 import { act, render } from "../../../test/render";
-import { AsyncResult } from "effect/reactivity";
-import type { OpenPreviewMutation } from "../../browser/openFileInPreview";
 import { __setClientSettingsForTests } from "../../hooks/useSettings";
-import { startWorkspaceFocus } from "../../lib/workspaceFocus";
 
-const mocks = vi.hoisted(() => ({ openPreview: vi.fn<OpenPreviewMutation<never>>() }));
-vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => mocks.openPreview }));
 import type { ChatComposerHandle } from "./ChatComposer";
 import { useChatShortcuts, type ChatShortcutCommands } from "./useChatShortcuts";
 import { useRightPanelActions } from "./useRightPanelActions";
@@ -214,15 +209,7 @@ it("runs a side chat's composer chords only from its composer, and never thread 
   expect(stops).toEqual([]);
 });
 
-function ClosedPanelChat({
-  threadRef,
-  browser = false,
-  newTab = false,
-}: {
-  threadRef: ScopedThreadRef;
-  browser?: boolean;
-  newTab?: boolean;
-}) {
+function ClosedPanelChat({ threadRef }: { threadRef: ScopedThreadRef }) {
   const panel = useRightPanelStore((state) =>
     selectThreadRightPanelState(state.byThreadKey, threadRef),
   );
@@ -239,10 +226,8 @@ function ClosedPanelChat({
     isServerThread: true,
     embedded: false,
     isGitRepo: false,
-    browserAvailable: browser,
-    canOperatePreview: browser,
-    canOperateTerminal: false,
-    onAddTerminal: () => {},
+    browserAvailable: false,
+    canOperatePreview: false,
     diffOpen: false,
     previewPanelOpen: false,
     rightPanelOpen: panelOpen,
@@ -261,13 +246,9 @@ function ClosedPanelChat({
       <Chat
         composerKeys={[]}
         commands={actions.shortcuts}
-        keybindings={
-          newTab
-            ? DEFAULT_RESOLVED_KEYBINDINGS
-            : [ctrlShift("m", browser ? "rightPanel.openBrowser" : "rightPanel.openDevice")]
-        }
+        keybindings={DEFAULT_RESOLVED_KEYBINDINGS}
       />
-      {newTab && panelOpen ? (
+      {panelOpen ? (
         <RightPanelTabs
           mode="inline"
           open
@@ -306,64 +287,9 @@ function ClosedPanelChat({
           {null}
         </RightPanelTabs>
       ) : null}
-      {browser && panelOpen ? (
-        <section data-workspace-area="panel" tabIndex={-1}>
-          <button data-workspace-focus-default>Browser tab</button>
-          <input aria-label="Browser URL" data-workspace-focus-default data-preview-url-input />
-        </section>
-      ) : null}
     </>
   );
 }
-
-it("opens a surface through chat shortcuts while no panel is mounted", async () => {
-  const threadRef = {
-    environmentId: EnvironmentId.make("panel-shortcut-test"),
-    threadId: ThreadId.make("closed-panel"),
-  };
-  using cleanup = new DisposableStack();
-  cleanup.defer(() => useRightPanelStore.getState().closeAllSurfaces(threadRef));
-  const readPanel = () =>
-    selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, threadRef);
-  expect(readPanel().isOpen).toBe(false);
-  // router: false because panel commands act on the local panel store without navigating.
-  await using _screen = await render(<ClosedPanelChat threadRef={threadRef} />, { router: false });
-  await userEvent.keyboard("{Control>}{Shift>}M{/Shift}{/Control}");
-  expect(readPanel().isOpen).toBe(true);
-  expect(readPanel().surfaces.map((surface) => surface.kind)).toEqual(["device"]);
-});
-
-it("focuses the URL after asynchronous browser creation opens the panel", async () => {
-  const threadRef = {
-    environmentId: EnvironmentId.make("panel-shortcut-test"),
-    threadId: ThreadId.make("browser-focus"),
-  };
-  __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
-  let resolveOpening!: (value: Awaited<ReturnType<OpenPreviewMutation<never>>>) => void;
-  const opening = new Promise<Awaited<ReturnType<OpenPreviewMutation<never>>>>((resolve) => {
-    resolveOpening = resolve;
-  });
-  mocks.openPreview.mockReset().mockReturnValue(opening);
-  await using screen = await render(<ClosedPanelChat threadRef={threadRef} browser />);
-  using cleanup = new DisposableStack();
-  cleanup.defer(startWorkspaceFocus(screen.router!));
-  cleanup.defer(() => useRightPanelStore.getState().closeAllSurfaces(threadRef));
-  await userEvent.keyboard("{Control>}{Shift>}M{/Shift}{/Control}");
-  await vi.waitFor(() => expect(mocks.openPreview).toHaveBeenCalledOnce());
-  await act(() =>
-    resolveOpening(
-      AsyncResult.success({
-        threadId: threadRef.threadId,
-        tabId: "new-browser",
-        navStatus: { _tag: "Idle" },
-        canGoBack: false,
-        canGoForward: false,
-        updatedAt: "2026-11-02T00:00:00.000Z",
-      }),
-    ),
-  );
-  await expect.element(screen.getByRole("textbox", { name: "Browser URL" })).toHaveFocus();
-});
 
 it("opens the new-tab menu from a closed panel and preserves its letter shortcuts", async () => {
   __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
@@ -371,7 +297,7 @@ it("opens the new-tab menu from a closed panel and preserves its letter shortcut
     environmentId: EnvironmentId.make("panel-shortcut-test"),
     threadId: ThreadId.make("new-tab-menu"),
   };
-  await using _screen = await render(<ClosedPanelChat threadRef={threadRef} newTab />);
+  await using _screen = await render(<ClosedPanelChat threadRef={threadRef} />);
   using cleanup = new DisposableStack();
   cleanup.defer(() => useRightPanelStore.getState().closeAllSurfaces(threadRef));
   const readPanel = () =>

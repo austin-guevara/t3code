@@ -50,14 +50,8 @@ in Settings.
 
 In a chat, `mod+t` opens the right panel and its new-tab menu, including when the panel
 is closed or has no tabs. Press a tab type’s letter to choose it. The shortcut leaves
-terminal-focused keys to the terminal.
-
-## Open a specific panel tab
-
-In Settings → Keybindings, bind a **Right Panel: Open** command for Browser, Terminal, Files,
-Diff, Pull Request, Linked Pull Requests, or Device. These commands have no default shortcuts.
-They use the same availability rules as the new-tab menu and work while the panel is closed.
-Opening a browser through its command focuses the address bar.
+terminal-focused keys to the terminal. Desktop and installed PWAs handle this shortcut;
+regular browser tabs may reserve it, so use a custom binding there.
 
 ## Copy pull request references
 

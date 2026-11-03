@@ -50,13 +50,6 @@ const PREVIEW_FORWARDED_COMMANDS = [
   "rightPanel.toggle",
   "rightPanel.new",
   "rightPanel.toggleMaximized",
-  "rightPanel.openBrowser",
-  "rightPanel.openTerminal",
-  "rightPanel.openFiles",
-  "rightPanel.openDiff",
-  "rightPanel.openPullRequest",
-  "rightPanel.openLinkedPullRequests",
-  "rightPanel.openDevice",
   "preview.focusUrl",
 ] as const;
 
