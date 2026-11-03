@@ -2033,12 +2033,14 @@ code {
   display: inline-block;
 }
 
-.chat-markdown a {
+.chat-markdown a,
+.composer-tiptap .composer-link {
   text-decoration: none;
 }
 
 /* File links and context chips own their color and focus ring. */
-.chat-markdown a:not(.chat-markdown-file-link, :has([data-slot="context-chip-label"])) {
+.chat-markdown a:not(.chat-markdown-file-link, :has([data-slot="context-chip-label"])),
+.composer-tiptap .composer-link {
   color: var(--info-foreground);
 }
 
@@ -2053,7 +2055,9 @@ code {
     .chat-markdown-file-link,
     :has([data-slot="context-chip-label"]),
     [data-markdown-image-link]
-  ):focus-visible {
+  ):focus-visible,
+.composer-tiptap .composer-link:hover,
+.composer-tiptap .composer-link:focus-visible {
   background-image: radial-gradient(circle, currentcolor 0.75px, transparent 1px);
   background-position: left bottom;
   background-repeat: repeat-x;
@@ -2570,11 +2574,6 @@ code {
   outline-offset: -2px;
 }
 
-.composer-tiptap .composer-link {
-  color: var(--primary);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
 .composer-link-favicon {
   display: inline-block;
   width: 14px;
