@@ -696,7 +696,13 @@ function textJsonForSpan(text: string, marks: RichTextMark[]): Record<string, un
 export function buildTiptapContent(
   value: string,
   skillLabelFor: (name: string) => SkillMeta | null,
-  options?: { styling?: boolean; blocks?: boolean; literalText?: boolean; literalLength?: number },
+  options?: {
+    styling?: boolean;
+    blocks?: boolean;
+    literalText?: boolean;
+    literalLength?: number;
+    emphasis?: boolean;
+  },
 ): Record<string, unknown>[] {
   if (options?.literalText) {
     return value.split("\n").map((line) => ({
@@ -745,7 +751,9 @@ export function buildTiptapContent(
     .join("");
   let atomIndex = 0;
   const buildInline = (content: string): InlineJson[] => {
-    const spans = styling ? parseInlineMarkdown(content) : [{ text: content, marks: [] }];
+    const spans = styling
+      ? parseInlineMarkdown(content, options?.emphasis)
+      : [{ text: content, marks: [] }];
     const inline: InlineJson[] = [];
     for (const span of spans) {
       span.text.split(sentinel).forEach((piece, index) => {
@@ -934,7 +942,7 @@ export function buildTiptapContent(
 export function buildDocJson(
   value: string,
   skillLabelFor: (name: string) => SkillMeta | null,
-  options?: { styling?: boolean; literalText?: boolean },
+  options?: { styling?: boolean; literalText?: boolean; emphasis?: boolean },
 ) {
   const content = buildTiptapContent(value, skillLabelFor, options);
   if (content.at(-1)?.type === "horizontalRule") content.push({ type: "paragraph" });
@@ -1118,14 +1126,19 @@ function appendInlineRuns(
       return;
     }
     const marks = orderedMarks[index]!;
+    const delimiter = (mark: RichTextMark) => {
+      const source = child.marks.find((item) => item.type.name === MARK_TO_TIPTAP[mark])?.attrs
+        .sourceDelimiter;
+      return typeof source === "string" ? source : RICH_TEXT_DELIMITERS[mark];
+    };
     const open = marks
       .slice(commonLength(marks, orderedMarks[index - 1] ?? []))
-      .map((mark) => RICH_TEXT_DELIMITERS[mark])
+      .map(delimiter)
       .join("");
     const close = marks
       .slice(commonLength(marks, orderedMarks[index + 1] ?? []))
       .toReversed()
-      .map((mark) => RICH_TEXT_DELIMITERS[mark])
+      .map(delimiter)
       .join("");
     const source = child.isText ? child.text! : readAtomSource(child);
     const docLen = child.isText ? source.length : 1;

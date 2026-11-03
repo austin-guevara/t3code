@@ -13,6 +13,7 @@ import { createElement, createRef, useEffect, useState } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
+import "~/index.css";
 import { act, fakeTimers, render } from "../../test/render";
 
 import { serializeEditorDoc } from "~/composer-rich-text-doc";
@@ -34,11 +35,13 @@ function Composer({
   richTextEnabled,
   skills,
   onChange,
+  emphasisStyle = "commonmark",
 }: {
   value: string;
   richTextEnabled: boolean;
   skills: ReadonlyArray<ServerProviderSkill>;
   onChange?: ComposerPromptEditorProps["onChange"] | undefined;
+  emphasisStyle?: ComposerPromptEditorProps["emphasisStyle"];
 }) {
   const [prompt, setPrompt] = useState({ value, cursor: value.length });
   return (
@@ -47,6 +50,7 @@ function Composer({
       value={prompt.value}
       cursor={prompt.cursor}
       richTextEnabled={richTextEnabled}
+      emphasisStyle={emphasisStyle}
       contextRecords={new Map()}
       skills={skills}
       disabled={false}
@@ -149,24 +153,40 @@ it.each([
   expect(textWithMark(editor, "code")).toEqual(code);
 });
 
-it("bolds with Mod+B only when text is selected", async () => {
-  await using screen = await mountEditor("ship it");
-  const { editor } = screen;
-  const modB = isMacPlatform(navigator.platform) ? "{Meta>}b{/Meta}" : "{Control>}b{/Control}";
-  await act(async () => {
-    editor.commands.focus("end");
-  });
-  await vi.waitFor(() => expect(document.activeElement).toBe(editor.view.dom));
-  await userEvent.keyboard(modB);
-  // Without the guard, Tiptap stores bold for the next typed text.
-  expect(editor.state.storedMarks).toBeNull();
+it.each(["commonmark", "slack"] as const)(
+  "formats selected text with keyboard shortcuts using %s source",
+  async (style) => {
+    await using screen = await render(
+      <Composer value="ship it" richTextEnabled skills={[]} emphasisStyle={style} />,
+    );
+    const editor = editorIn(screen.container);
+    const modB = isMacPlatform(navigator.platform) ? "{Meta>}b{/Meta}" : "{Control>}b{/Control}";
+    await act(async () => {
+      editor.commands.focus("end");
+    });
+    await vi.waitFor(() => expect(document.activeElement).toBe(editor.view.dom));
+    await userEvent.keyboard(modB);
+    // Without the guard, Tiptap stores bold for the next typed text.
+    expect(editor.state.storedMarks).toBeNull();
 
-  await act(async () => {
-    editor.commands.setTextSelection({ from: 1, to: 5 });
-  });
-  await userEvent.keyboard(modB);
-  await vi.waitFor(() => expect(textWithMark(editor, "bold")).toEqual(["ship"]));
-});
+    await act(async () => {
+      editor.commands.setTextSelection({ from: 1, to: 5 });
+    });
+    await userEvent.keyboard(modB);
+    await vi.waitFor(() => expect(textWithMark(editor, "bold")).toEqual(["ship"]));
+    const boldDelimiter = style === "slack" ? "*" : "**";
+    expect(serializeEditorDoc(editor.state.doc).value).toBe(
+      `${boldDelimiter}ship${boldDelimiter} it`,
+    );
+    await userEvent.keyboard(modB);
+    const modI = isMacPlatform(navigator.platform) ? "{Meta>}i{/Meta}" : "{Control>}i{/Control}";
+    await userEvent.keyboard(modI);
+    const italicDelimiter = style === "slack" ? "_" : "*";
+    expect(serializeEditorDoc(editor.state.doc).value).toBe(
+      `${italicDelimiter}ship${italicDelimiter} it`,
+    );
+  },
+);
 
 it.each([false, true])(
   "composes an umlaut without wrapping the preedit text (rich text: %s)",
@@ -436,4 +456,93 @@ describe("an Arabic line", () => {
       box.left + box.width / 2,
     );
   });
+});
+
+it("renders emphasis without rewriting typed, pasted, or restored source", async () => {
+  const onChange = vi.fn();
+  await using screen = await render(
+    <Composer value="" richTextEnabled skills={[]} emphasisStyle="slack" onChange={onChange} />,
+  );
+  const editor = editorIn(screen.container);
+  let typed = "";
+  for (const char of "*bold* _italic_") {
+    typed += char;
+    await act(() => {
+      const { from, to } = editor.state.selection;
+      typeText(editor, from, to, char);
+    });
+    expect(onChange.mock.lastCall?.[0]).toBe(typed);
+  }
+  expect(editor.view.dom.textContent).toBe(typed);
+  expect(editor.view.dom.querySelector("strong")?.textContent).toBe("bold");
+  expect(editor.view.dom.querySelector("em")?.textContent).toBe("italic");
+  await act(() => {
+    editor.commands.selectAll();
+    const clipboardData = new DataTransfer();
+    clipboardData.setData("text/plain", "*pasted* _words_");
+    editor.view.dom.dispatchEvent(new ClipboardEvent("paste", { clipboardData, cancelable: true }));
+  });
+  expect(serializeEditorDoc(editor.state.doc).value).toBe("*pasted* _words_");
+  const saved = "*saved bold* _saved italic_";
+  await screen.rerender(
+    <Composer key="restored" value={saved} richTextEnabled skills={[]} emphasisStyle="slack" />,
+  );
+  const restored = editorIn(screen.container);
+  expect(serializeEditorDoc(restored.state.doc).value).toBe(saved);
+  expect(restored.view.dom.querySelector("strong")?.textContent).toBe("saved bold");
+  await screen.rerender(
+    <Composer
+      key="restored"
+      value={saved}
+      richTextEnabled
+      skills={[]}
+      emphasisStyle="commonmark"
+    />,
+  );
+  const commonmark = editorIn(screen.container);
+  expect(serializeEditorDoc(commonmark.state.doc).value).toBe(saved);
+  expect(commonmark.view.dom.querySelector("strong")).toBeNull();
+  expect(commonmark.view.dom.querySelector("em")?.textContent).toBe("saved bold");
+});
+
+it("reveals faint emphasis markers only while editing their span, preserving the source", async () => {
+  const source = "*bold* _italic_ tail";
+  await using screen = await render(
+    <Composer value={source} richTextEnabled skills={[]} emphasisStyle="slack" />,
+  );
+  const editor = editorIn(screen.container);
+  const markers = () => [
+    ...editor.view.dom.querySelectorAll<HTMLElement>(".composer-emphasis-marker"),
+  ];
+  const visibleMarkers = () =>
+    markers().filter((marker) => marker.getBoundingClientRect().width > 0);
+  expect(markers()).toHaveLength(4);
+  expect(visibleMarkers()).toHaveLength(0);
+  await act(() => editor.commands.setTextSelection(3));
+  expect(visibleMarkers().map((marker) => marker.textContent)).toEqual(["*", "*"]);
+  expect(visibleMarkers().map((marker) => getComputedStyle(marker).opacity)).toEqual([
+    "0.75",
+    "0.75",
+  ]);
+  await act(() => editor.commands.setTextSelection(11));
+  expect(visibleMarkers().map((marker) => marker.textContent)).toEqual(["_", "_"]);
+  await act(() => editor.commands.focus("end"));
+  await vi.waitFor(() => expect(document.activeElement).toBe(editor.view.dom));
+  expect(visibleMarkers()).toHaveLength(0);
+  expect(serializeEditorDoc(editor.state.doc).value).toBe(source);
+  await userEvent.keyboard("{ArrowLeft}{ArrowLeft}{ArrowLeft}{ArrowLeft}{ArrowLeft}");
+  await vi.waitFor(() =>
+    expect(visibleMarkers().map((marker) => marker.textContent)).toEqual(["_", "_"]),
+  );
+  expect(serializeEditorDoc(editor.state.doc).value).toBe(source);
+  await act(() => editor.commands.setTextSelection(16));
+  await userEvent.keyboard("{Backspace}");
+  expect(serializeEditorDoc(editor.state.doc).value).toBe("*bold* _italic tail");
+  expect(editor.view.dom.querySelector("em")).toBeNull();
+  await userEvent.keyboard("_");
+  expect(serializeEditorDoc(editor.state.doc).value).toBe(source);
+  expect(visibleMarkers().map((marker) => marker.textContent)).toEqual(["_", "_"]);
+  await userEvent.keyboard(" ");
+  expect(visibleMarkers()).toHaveLength(0);
+  expect(serializeEditorDoc(editor.state.doc).value).toBe("*bold* _italic_  tail");
 });

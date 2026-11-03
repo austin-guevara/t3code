@@ -51,6 +51,14 @@ describe("composer rich text markdown", () => {
     ]);
   });
 
+  it("can keep emphasis literal while preserving code and identifier parsing", () => {
+    expect(parseInlineMarkdown("*bold* _italic_ `*literal*` snake_case", false)).toEqual([
+      { text: "*bold* _italic_ ", marks: [] },
+      { text: "*literal*", marks: ["code"] },
+      { text: " snake_case", marks: [] },
+    ]);
+  });
+
   it("keeps code span contents literal", () => {
     expect(parseInlineMarkdown("`**not bold**`")).toEqual([
       { text: "**not bold**", marks: ["code"] },

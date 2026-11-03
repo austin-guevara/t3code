@@ -58,6 +58,8 @@ import {
   pastedPathQueryLength,
 } from "~/composer-logic";
 import { useStableCallback } from "~/hooks/useStableCallback";
+import type { ComposerEmphasisStyle } from "~/composer-rich-text";
+import { markdownEmphasisRanges } from "~/markdownEmphasis";
 import { caretLineDirection, ComposerTextDirectionExtension } from "~/composer-text-direction";
 import {
   collectComposerPromptInlineTokens,
@@ -147,6 +149,7 @@ export interface ComposerPromptEditorProps {
   value: string;
   cursor: number;
   richTextEnabled?: boolean;
+  emphasisStyle?: ComposerEmphasisStyle;
   literalText?: boolean;
   contextRecords: ComposerDraftContextRecords;
   buildContextClipboardFragment?:
@@ -753,6 +756,90 @@ const ComposerMarkersExtension = Extension.create({
   },
 });
 
+const ComposerEmphasisExtension = Extension.create<{ style: ComposerEmphasisStyle }>({
+  name: "composer-visual-emphasis",
+  addOptions: () => ({ style: "commonmark" }),
+  addProseMirrorPlugins() {
+    const style = this.options.style;
+    const key = new PluginKey<DecorationSet>("composer-visual-emphasis");
+    const cachedRanges = new WeakMap<ProseMirrorNode, ReturnType<typeof markdownEmphasisRanges>>();
+    const decorations = (state: EditorState) => {
+      const { doc, selection } = state;
+      const ranges: Decoration[] = [];
+      doc.descendants((node, pos) => {
+        if (node.type.spec.code) return false;
+        if (!node.isTextblock) return;
+        let emphasis = cachedRanges.get(node);
+        if (!emphasis) {
+          let text = node.textBetween(0, node.content.size, undefined, "\uFFFC");
+          node.forEach((child, offset) => {
+            if (child.marks.some((mark) => mark.type.spec.code))
+              text =
+                text.slice(0, offset) +
+                "x".repeat(child.nodeSize) +
+                text.slice(offset + child.nodeSize);
+          });
+          emphasis = markdownEmphasisRanges(text, style);
+          cachedRanges.set(node, emphasis);
+        }
+        for (const range of emphasis) {
+          const start = pos + 1 + range.start;
+          const end = pos + 1 + range.end;
+          const active = selection.empty
+            ? selection.from >= start && selection.from <= end
+            : selection.from < end && selection.to > start;
+          const markerAttrs = {
+            class: "composer-emphasis-marker",
+            "data-emphasis-hidden": String(!active),
+          };
+          ranges.push(
+            Decoration.inline(start, pos + 1 + range.from, markerAttrs),
+            Decoration.inline(pos + 1 + range.from, pos + 1 + range.to, { nodeName: range.tag }),
+            Decoration.inline(pos + 1 + range.to, end, markerAttrs),
+          );
+        }
+        return false;
+      });
+      return DecorationSet.create(doc, ranges);
+    };
+    return [
+      new Plugin({
+        key,
+        state: {
+          init: (_, state) => decorations(state),
+          apply: (tr, old, _, state) =>
+            tr.docChanged || tr.selectionSet ? decorations(state) : old,
+        },
+        props: { decorations: (state) => key.getState(state) },
+      }),
+    ];
+  },
+});
+
+function visualEmphasisExtensions(style: ComposerEmphasisStyle) {
+  return [ComposerItalicExtension, ComposerBoldExtension].map((extension) =>
+    extension.extend({
+      addAttributes() {
+        return {
+          sourceDelimiter: {
+            default:
+              extension.name === "bold"
+                ? style === "slack"
+                  ? "*"
+                  : "**"
+                : style === "slack"
+                  ? "_"
+                  : "*",
+            rendered: false,
+          },
+        };
+      },
+      addInputRules: () => [],
+      addPasteRules: () => [],
+    }),
+  );
+}
+
 type TiptapEditor = NonNullable<ReturnType<typeof useEditor>>;
 
 function replaceSkillChips(
@@ -785,7 +872,7 @@ export function ComposerPromptEditorTiptap(props: ComposerPromptEditorProps) {
   // a caret inside unknown `$name` text, so retain the exact Markdown offset here.
   return (
     <ComposerPromptEditorTiptapInner
-      key={`${props.draftKey ?? ""}:${props.literalText ? "literal" : props.richTextEnabled ? "rich" : "plain"}`}
+      key={`${props.draftKey ?? ""}:${props.literalText ? "literal" : props.richTextEnabled ? "rich" : "plain"}:${props.emphasisStyle ?? "commonmark"}`}
       {...props}
       restoreFocusRef={restoreFocusRef}
       initialExpandedCursor={
@@ -814,7 +901,10 @@ const ComposerUndoGroupingExtension = Extension.create<
 });
 
 // Module scope keeps extension identity stable; Tiptap hooks read config through this.
-function createComposerExtensions(richText: boolean) {
+function createComposerExtensions(
+  richText: boolean,
+  emphasisStyle: ComposerEmphasisStyle = "commonmark",
+) {
   return [
     StarterKit.configure({
       blockquote: false,
@@ -846,8 +936,8 @@ function createComposerExtensions(richText: boolean) {
     ...(richText
       ? [
           ComposerBoldSelectionOnlyExtension,
-          ComposerItalicExtension,
-          ComposerBoldExtension,
+          ...visualEmphasisExtensions(emphasisStyle),
+          ComposerEmphasisExtension.configure({ style: emphasisStyle }),
           ComposerStrikeExtension,
           ComposerCodeExtension,
           ComposerCodeBlockExtension.extend({
@@ -920,6 +1010,7 @@ function createComposerExtensions(richText: boolean) {
 }
 
 const RICH_TEXT_EXTENSIONS = createComposerExtensions(true);
+const SLACK_TEXT_EXTENSIONS = createComposerExtensions(true, "slack");
 const PLAIN_TEXT_EXTENSIONS = createComposerExtensions(false);
 
 function ComposerPromptEditorTiptapInner(
@@ -932,6 +1023,7 @@ function ComposerPromptEditorTiptapInner(
     value,
     cursor,
     richTextEnabled,
+    emphasisStyle = "commonmark",
     literalText = false,
     contextRecords,
     buildContextClipboardFragment,
@@ -1105,10 +1197,15 @@ function ComposerPromptEditorTiptapInner(
 
   const editor = useEditor(
     {
-      extensions: richText ? RICH_TEXT_EXTENSIONS : PLAIN_TEXT_EXTENSIONS,
+      extensions: richText
+        ? emphasisStyle === "slack"
+          ? SLACK_TEXT_EXTENSIONS
+          : RICH_TEXT_EXTENSIONS
+        : PLAIN_TEXT_EXTENSIONS,
       content: buildDocJson(value, (name) => composerSkillMeta(skills, name), {
         styling: richText,
         literalText,
+        emphasis: false,
       }),
       editable: !disabled,
       editorProps: {
@@ -1400,7 +1497,7 @@ function ComposerPromptEditorTiptapInner(
             insertMarkdownParagraphs(
               text,
               skillLabelFor,
-              { styling: richText, blocks: !nested, literalText, literalLength },
+              { styling: richText, blocks: !nested, literalText, literalLength, emphasis: false },
               (content) => {
                 editorInstance
                   .chain()
@@ -1556,7 +1653,7 @@ function ComposerPromptEditorTiptapInner(
     if (previousSnapshot.value !== value) {
       saveCitationDraft(editor, previousSnapshot.value);
       editor.commands.setContent(
-        buildDocJson(value, skillLabelFor, { styling: richText, literalText }),
+        buildDocJson(value, skillLabelFor, { styling: richText, literalText, emphasis: false }),
         {
           emitUpdate: false,
         },
@@ -1839,7 +1936,13 @@ function ComposerPromptEditorTiptapInner(
 function insertMarkdownParagraphs(
   value: string,
   skillLabelFor: (name: string) => SkillMeta | null,
-  options: { styling: boolean; blocks?: boolean; literalText?: boolean; literalLength?: number },
+  options: {
+    styling: boolean;
+    blocks?: boolean;
+    literalText?: boolean;
+    literalLength?: number;
+    emphasis?: boolean;
+  },
   insertContent: (content: JSONContent[] | JSONContent) => void,
 ): void {
   const blocks = buildTiptapContent(value, skillLabelFor, options);

@@ -1,3 +1,7 @@
+import type { ClientSettings } from "@t3tools/contracts";
+
+export type ComposerEmphasisStyle = ClientSettings["composerEmphasisStyle"];
+
 export type RichTextMark = "bold" | "italic" | "strike" | "code";
 
 interface RichTextSpan {
@@ -26,7 +30,7 @@ function pushSpan(spans: RichTextSpan[], text: string, marks: RichTextMark[]): v
   }
 }
 
-export function parseInlineMarkdown(text: string): RichTextSpan[] {
+export function parseInlineMarkdown(text: string, emphasis = true): RichTextSpan[] {
   const root: RichTextSpan[] = [];
   const stack: { delimiter: string; mark: RichTextMark; spans: RichTextSpan[] }[] = [];
   const current = () => stack.at(-1)?.spans ?? root;
@@ -55,7 +59,10 @@ export function parseInlineMarkdown(text: string): RichTextSpan[] {
       }
       continue;
     }
-    if (char !== "*" && char !== "_" && char !== "~") {
+    if (
+      (!emphasis && (char === "*" || char === "_")) ||
+      (char !== "*" && char !== "_" && char !== "~")
+    ) {
       pushSpan(current(), char, []);
       index += 1;
       continue;

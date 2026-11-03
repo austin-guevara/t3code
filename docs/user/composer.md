@@ -30,6 +30,13 @@ at the end, leave the block. **Backspace** at the start of a code block turns it
 back into plain lines. Choose the language in a code block's corner to change
 it. Very large code blocks are shown without syntax highlighting.
 
+In Settings → Chat → Emphasis rendering, choose **Slack-style** to display `*bold*` and
+`_italic_` in the composer and your sent messages. CommonMark-style remains the default.
+Emphasis styling leaves the characters you type intact, including in saved drafts and
+text sent to the agent. This is a display preference; changing it reinterprets your
+messages without rewriting them. Assistant messages keep their usual Markdown rendering.
+Code stays literal in either mode.
+
 ## Attach files
 
 Attach up to 100 files per message. Each image can be up to 10 MiB, with at most

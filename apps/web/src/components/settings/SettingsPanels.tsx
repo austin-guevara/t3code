@@ -524,6 +524,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.composerRichTextEnabled !== DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled
       ? ["Rich text composer"]
       : []),
+    ...(settings.composerEmphasisStyle !== DEFAULT_UNIFIED_SETTINGS.composerEmphasisStyle
+      ? ["Emphasis rendering"]
+      : []),
     ...(settings.sendShortcut !== DEFAULT_UNIFIED_SETTINGS.sendShortcut ? ["Send shortcut"] : []),
     ...(settings.followUpBehavior !== DEFAULT_UNIFIED_SETTINGS.followUpBehavior
       ? ["Follow-up behavior"]
@@ -640,6 +643,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       proactivePanelsEnabled: DEFAULT_UNIFIED_SETTINGS.proactivePanelsEnabled,
       showSkillsInSlashMenu: DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu,
       composerRichTextEnabled: DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled,
+      composerEmphasisStyle: DEFAULT_UNIFIED_SETTINGS.composerEmphasisStyle,
       sendShortcut: DEFAULT_UNIFIED_SETTINGS.sendShortcut,
       followUpBehavior: DEFAULT_UNIFIED_SETTINGS.followUpBehavior,
       contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
@@ -1109,6 +1113,39 @@ export function ChatSettingsPanel() {
               }
               aria-label="Rich text composer"
             />
+          }
+        />
+        <SettingsRow
+          {...searchableSetting("composer-emphasis-style")}
+          description="Choose how emphasis appears in the composer and your messages. Text is sent as typed."
+          resetAction={
+            settings.composerEmphasisStyle !== DEFAULT_UNIFIED_SETTINGS.composerEmphasisStyle ? (
+              <SettingResetButton
+                label="emphasis rendering"
+                onClick={() =>
+                  updateSettings({
+                    composerEmphasisStyle: DEFAULT_UNIFIED_SETTINGS.composerEmphasisStyle,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.composerEmphasisStyle}
+              onValueChange={(value) => {
+                if (value === "commonmark" || value === "slack")
+                  updateSettings({ composerEmphasisStyle: value });
+              }}
+            >
+              <SelectTrigger aria-label="Emphasis rendering">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectPopup>
+                <SelectItem value="commonmark">CommonMark-style</SelectItem>
+                <SelectItem value="slack">Slack-style</SelectItem>
+              </SelectPopup>
+            </Select>
           }
         />
         <SettingsRow
