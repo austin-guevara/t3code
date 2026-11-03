@@ -2446,14 +2446,22 @@ code {
   padding: 0.05em 0.25em;
 }
 
-.composer-rich-marker {
+.composer-rich-marker,
+.composer-emphasis-marker {
   color: var(--muted-foreground);
   opacity: 0.75;
   font-weight: 400;
   font-style: normal;
   text-decoration: none;
+}
+
+.composer-rich-marker {
   user-select: none;
   pointer-events: none;
+}
+
+.composer-emphasis-marker[data-emphasis-hidden="true"] {
+  font-size: 0;
 }
 
 /* Selected chips (node selection from arrowing into or clicking a chip). */

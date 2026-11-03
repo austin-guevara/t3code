@@ -763,7 +763,8 @@ const ComposerEmphasisExtension = Extension.create<{ style: ComposerEmphasisStyl
     const style = this.options.style;
     const key = new PluginKey<DecorationSet>("composer-visual-emphasis");
     const cachedRanges = new WeakMap<ProseMirrorNode, ReturnType<typeof markdownEmphasisRanges>>();
-    const decorations = (doc: ProseMirrorNode) => {
+    const decorations = (state: EditorState) => {
+      const { doc, selection } = state;
       const ranges: Decoration[] = [];
       doc.descendants((node, pos) => {
         if (node.type.spec.code) return false;
@@ -781,10 +782,22 @@ const ComposerEmphasisExtension = Extension.create<{ style: ComposerEmphasisStyl
           emphasis = markdownEmphasisRanges(text, style);
           cachedRanges.set(node, emphasis);
         }
-        for (const range of emphasis)
+        for (const range of emphasis) {
+          const start = pos + 1 + range.start;
+          const end = pos + 1 + range.end;
+          const active = selection.empty
+            ? selection.from >= start && selection.from <= end
+            : selection.from < end && selection.to > start;
+          const markerAttrs = {
+            class: "composer-emphasis-marker",
+            "data-emphasis-hidden": String(!active),
+          };
           ranges.push(
+            Decoration.inline(start, pos + 1 + range.from, markerAttrs),
             Decoration.inline(pos + 1 + range.from, pos + 1 + range.to, { nodeName: range.tag }),
+            Decoration.inline(pos + 1 + range.to, end, markerAttrs),
           );
+        }
         return false;
       });
       return DecorationSet.create(doc, ranges);
@@ -793,8 +806,9 @@ const ComposerEmphasisExtension = Extension.create<{ style: ComposerEmphasisStyl
       new Plugin({
         key,
         state: {
-          init: (_, state) => decorations(state.doc),
-          apply: (tr, old, _, state) => (tr.docChanged ? decorations(state.doc) : old),
+          init: (_, state) => decorations(state),
+          apply: (tr, old, _, state) =>
+            tr.docChanged || tr.selectionSet ? decorations(state) : old,
         },
         props: { decorations: (state) => key.getState(state) },
       }),

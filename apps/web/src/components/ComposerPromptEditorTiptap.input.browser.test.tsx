@@ -13,6 +13,7 @@ import { createElement, createRef, useEffect, useState } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
+import "~/index.css";
 import { act, fakeTimers, render } from "../../test/render";
 
 import { serializeEditorDoc } from "~/composer-rich-text-doc";
@@ -502,4 +503,46 @@ it("renders emphasis without rewriting typed, pasted, or restored source", async
   expect(serializeEditorDoc(commonmark.state.doc).value).toBe(saved);
   expect(commonmark.view.dom.querySelector("strong")).toBeNull();
   expect(commonmark.view.dom.querySelector("em")?.textContent).toBe("saved bold");
+});
+
+it("reveals faint emphasis markers only while editing their span, preserving the source", async () => {
+  const source = "*bold* _italic_ tail";
+  await using screen = await render(
+    <Composer value={source} richTextEnabled skills={[]} emphasisStyle="slack" />,
+  );
+  const editor = editorIn(screen.container);
+  const markers = () => [
+    ...editor.view.dom.querySelectorAll<HTMLElement>(".composer-emphasis-marker"),
+  ];
+  const visibleMarkers = () =>
+    markers().filter((marker) => marker.getBoundingClientRect().width > 0);
+  expect(markers()).toHaveLength(4);
+  expect(visibleMarkers()).toHaveLength(0);
+  await act(() => editor.commands.setTextSelection(3));
+  expect(visibleMarkers().map((marker) => marker.textContent)).toEqual(["*", "*"]);
+  expect(visibleMarkers().map((marker) => getComputedStyle(marker).opacity)).toEqual([
+    "0.75",
+    "0.75",
+  ]);
+  await act(() => editor.commands.setTextSelection(11));
+  expect(visibleMarkers().map((marker) => marker.textContent)).toEqual(["_", "_"]);
+  await act(() => editor.commands.focus("end"));
+  await vi.waitFor(() => expect(document.activeElement).toBe(editor.view.dom));
+  expect(visibleMarkers()).toHaveLength(0);
+  expect(serializeEditorDoc(editor.state.doc).value).toBe(source);
+  await userEvent.keyboard("{ArrowLeft}{ArrowLeft}{ArrowLeft}{ArrowLeft}{ArrowLeft}");
+  await vi.waitFor(() =>
+    expect(visibleMarkers().map((marker) => marker.textContent)).toEqual(["_", "_"]),
+  );
+  expect(serializeEditorDoc(editor.state.doc).value).toBe(source);
+  await act(() => editor.commands.setTextSelection(16));
+  await userEvent.keyboard("{Backspace}");
+  expect(serializeEditorDoc(editor.state.doc).value).toBe("*bold* _italic tail");
+  expect(editor.view.dom.querySelector("em")).toBeNull();
+  await userEvent.keyboard("_");
+  expect(serializeEditorDoc(editor.state.doc).value).toBe(source);
+  expect(visibleMarkers().map((marker) => marker.textContent)).toEqual(["_", "_"]);
+  await userEvent.keyboard(" ");
+  expect(visibleMarkers()).toHaveLength(0);
+  expect(serializeEditorDoc(editor.state.doc).value).toBe("*bold* _italic_  tail");
 });

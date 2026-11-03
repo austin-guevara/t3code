@@ -15,14 +15,21 @@ function emphasisTag(node: Emphasis | Strong, text: string, style: ComposerEmpha
 }
 
 export function markdownEmphasisRanges(text: string, style: ComposerEmphasisStyle) {
-  const ranges: { from: number; to: number; tag: "strong" | "em" }[] = [];
+  const ranges: { start: number; from: number; to: number; end: number; tag: "strong" | "em" }[] =
+    [];
   if (!/[*_]/.test(text)) return ranges;
   visitEmphasis(parseMarkdownWithMath(text), (node) => {
     const start = node.position?.start.offset;
     const end = node.position?.end.offset;
     if (start === undefined || end === undefined) return;
     const width = node.type === "strong" ? 2 : 1;
-    ranges.push({ from: start + width, to: end - width, tag: emphasisTag(node, text, style) });
+    ranges.push({
+      start,
+      from: start + width,
+      to: end - width,
+      end,
+      tag: emphasisTag(node, text, style),
+    });
   });
   return ranges;
 }
