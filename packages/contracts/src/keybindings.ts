@@ -20,6 +20,19 @@ export const THREAD_JUMP_KEYBINDING_COMMANDS = [
 ] as const;
 export type ThreadJumpKeybindingCommand = (typeof THREAD_JUMP_KEYBINDING_COMMANDS)[number];
 
+export const PIN_OPEN_KEYBINDING_COMMANDS = [
+  "pin.open.1",
+  "pin.open.2",
+  "pin.open.3",
+  "pin.open.4",
+  "pin.open.5",
+  "pin.open.6",
+  "pin.open.7",
+  "pin.open.8",
+  "pin.open.9",
+] as const;
+export type PinOpenKeybindingCommand = (typeof PIN_OPEN_KEYBINDING_COMMANDS)[number];
+
 export const MODEL_PICKER_JUMP_KEYBINDING_COMMANDS = [
   "modelPicker.jump.1",
   "modelPicker.jump.2",
@@ -74,6 +87,7 @@ export const STATIC_KEYBINDING_COMMANDS = [
   "rightPanel.nextTab",
   "rightPanel.previousTab",
   "browser.newTab",
+  ...PIN_OPEN_KEYBINDING_COMMANDS,
   "view.reopenClosed",
   "pullRequest.copyNumber",
   "diff.toggle",

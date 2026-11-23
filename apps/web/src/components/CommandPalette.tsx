@@ -116,6 +116,7 @@ import {
   promptLinkRepositoryOf,
 } from "./promptLinks/copyPromptLink";
 import { useClientSettings } from "../hooks/useSettings";
+import { useBrowserPaletteItems } from "../pins/useBrowserPaletteItems";
 import { useStableCallback } from "../hooks/useStableCallback";
 import { readLocalApi } from "../localApi";
 import { configuredHostedAppUrl } from "../hostedPairing";
@@ -1861,6 +1862,7 @@ function OpenCommandPaletteDialog(props: {
   }
 
   const rootGroups = buildRootGroups({ actionItems, recentThreadItems }, messages);
+  const browserSearchItems = useBrowserPaletteItems();
   // Every setting goes to the palette's own matcher, so settings get the same
   // word starts and typo tolerance as threads.
   const settingsSearchItems: CommandPaletteActionItem[] = settingsForThisPlatform(
@@ -1960,6 +1962,7 @@ function OpenCommandPaletteDialog(props: {
             )
           : allThreadItems,
       threadMessageItems: isLinkedThreadSearch ? [] : threadMessageItems,
+      browserSearchItems: isLinkedThreadSearch ? [] : browserSearchItems,
       now: searchNow,
     },
     messages,

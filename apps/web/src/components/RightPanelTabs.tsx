@@ -32,6 +32,7 @@ import {
   closestCenter,
   DndContext,
   type DragEndEvent,
+  type DragStartEvent,
   PointerSensor,
   useSensor,
   useSensors,
@@ -69,6 +70,8 @@ import {
 import { isElectron } from "~/env";
 import type { DesktopPreviewOverlay } from "~/previewStateStore";
 import { linkedThreadTitle } from "~/linkedThreadSurface";
+import { pinnableUrl, pinsFull } from "~/pins/pinActions";
+import { isOverPinDrop, usePinDropStore } from "~/pins/pinDropStore";
 import type { RightPanelSurface } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
 import { issueStatePresentation } from "~/components/issue/issuePresentation";
@@ -148,6 +151,8 @@ export interface RightPanelTabsProps {
   onMoveSurface?: (surfaceId: string, toIndex: number) => void;
   onCopyFilePath: (relativePath: string) => void;
   onDuplicateBrowser?: (surface: RightPanelSurface) => void;
+  /** Moves a browser tab into the sidebar's pins. */
+  onPinBrowser?: (surface: RightPanelSurface) => void;
   onAddBrowser: () => void;
   /** Keep separate from the DOM click handler so a MouseEvent cannot become a profile id. */
   onAddBrowserInProfile: (profileId: string) => void;
@@ -232,6 +237,7 @@ type TabContextMenuAction =
   | "rename"
   | "copy-path"
   | "duplicate"
+  | "pin"
   | "toggle-mute"
   | "close"
   | "close-others"
@@ -906,12 +912,40 @@ function PullRequestSurfaceIcon({
 function SortableTabList(props: {
   surfaces: readonly RightPanelSurface[];
   onMove: ((surfaceId: string, toIndex: number) => void) | undefined;
+  /** Surfaces that can be dropped on the sidebar's pins. */
+  canPin?: (surface: RightPanelSurface) => boolean;
+  onPin?: ((surface: RightPanelSurface) => void) | undefined;
   children: ReactNode;
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const surfaceIds = props.surfaces.map((surface) => surface.id);
-  const { onMove, surfaces } = props;
+  const { onMove, surfaces, canPin, onPin } = props;
+  const stopPinTracking = useRef<(() => void) | null>(null);
+  const endPinTracking = () => {
+    stopPinTracking.current?.();
+    stopPinTracking.current = null;
+    const { over } = usePinDropStore.getState();
+    usePinDropStore.setState({ dragging: false, over: false });
+    return over;
+  };
+  // The strip keeps the tab on its own axis, so the pointer says whether it is over the pins.
+  const handleDragStart = ({ active }: DragStartEvent) => {
+    const surface = surfaces.find((entry) => entry.id === active.id);
+    if (!surface || !onPin || !canPin?.(surface)) return;
+    const onPointerMove = (event: PointerEvent) => {
+      const over = isOverPinDrop(event.clientX, event.clientY);
+      if (usePinDropStore.getState().over !== over) usePinDropStore.setState({ over });
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    stopPinTracking.current = () => window.removeEventListener("pointermove", onPointerMove);
+    usePinDropStore.setState({ dragging: true, over: false });
+  };
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (endPinTracking()) {
+      const surface = surfaces.find((entry) => entry.id === active.id);
+      if (surface) onPin?.(surface);
+      return;
+    }
     if (!over || active.id === over.id) return;
     const toIndex = surfaces.findIndex((surface) => surface.id === over.id);
     if (toIndex >= 0) onMove?.(String(active.id), toIndex);
@@ -921,7 +955,9 @@ function SortableTabList(props: {
       sensors={sensors}
       collisionDetection={closestCenter}
       modifiers={TAB_DRAG_MODIFIERS}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onDragCancel={() => void endPinTracking()}
     >
       <SortableContext items={surfaceIds} strategy={horizontalListSortingStrategy}>
         {props.children}
@@ -1342,6 +1378,18 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         label: gt("Duplicate"),
         disabled: !props.browserAvailable || !menuPreviewTabId || !props.onDuplicateBrowser,
       });
+      if (props.onPinBrowser) {
+        const full = pinsFull();
+        items.push({
+          id: "pin",
+          label: full ? gt("Pin tab (pins are full)") : gt("Pin tab"),
+          disabled:
+            full ||
+            pinnableUrl(
+              surface.resourceId ? props.previewSessions[surface.resourceId] : undefined,
+            ) === null,
+        });
+      }
       items.push({
         id: "toggle-mute",
         ...tabMuteMenuItem(
@@ -1389,6 +1437,9 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         break;
       case "duplicate":
         props.onDuplicateBrowser?.(surface);
+        break;
+      case "pin":
+        props.onPinBrowser?.(surface);
         break;
       case "toggle-mute": {
         const runtimeTabId =
@@ -1541,7 +1592,17 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                 <span aria-hidden className="mx-0.5 h-4 w-px shrink-0 bg-border" />
               </>
             ) : null}
-            <SortableTabList surfaces={props.surfaces} onMove={props.onMoveSurface}>
+            <SortableTabList
+              surfaces={props.surfaces}
+              onMove={props.onMoveSurface}
+              canPin={(surface) =>
+                surface.kind === "preview" &&
+                pinnableUrl(
+                  surface.resourceId ? props.previewSessions[surface.resourceId] : undefined,
+                ) !== null
+              }
+              onPin={props.onPinBrowser}
+            >
               {props.surfaces.map((surface) => {
                 const previewTabId = previewTabIdOf(surface, props.previewSessions);
                 const favicon = previewFaviconOf(

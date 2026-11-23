@@ -2518,6 +2518,7 @@ export default function ChatView(props: ChatViewProps) {
     createBrowserSurface,
     createBrowserSurfaceStable,
     duplicateBrowserSurfaceStable,
+    pinBrowserSurfaceStable,
     moveRightPanelSurfaceStable,
     onOpenToolDiffStable,
     onOpenTurnDiffStable,
@@ -4277,6 +4278,7 @@ export default function ChatView(props: ChatViewProps) {
           onNewTab={() => void openNewBrowserTabStable()}
           onAddBrowserInProfile={createBrowserSurfaceStable}
           onDuplicateBrowser={duplicateBrowserSurfaceStable}
+          onPinBrowser={pinBrowserSurfaceStable}
           onAddTerminal={addTerminalSurfaceStable}
           onAddDiff={addDiffSurfaceStable}
           onAddFiles={addFilesSurfaceStable}

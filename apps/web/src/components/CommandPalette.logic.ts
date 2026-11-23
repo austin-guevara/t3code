@@ -585,6 +585,8 @@ export function filterCommandPaletteGroups(
     projectSearchItems: ReadonlyArray<CommandPaletteActionItem>;
     settingsSearchItems?: ReadonlyArray<CommandPaletteActionItem>;
     threadSearchItems: ReadonlyArray<CommandPaletteActionItem>;
+    /** Open browser tabs and pinned apps. */
+    browserSearchItems?: ReadonlyArray<CommandPaletteActionItem>;
     /** Threads whose messages match, best first; threads already listed are skipped. */
     threadMessageItems?: ReadonlyArray<CommandPaletteActionItem>;
     now?: number;
@@ -640,6 +642,13 @@ export function filterCommandPaletteGroups(
         value: "threads-search",
         label: resolve(msg("Threads")),
         items: input.threadSearchItems,
+      });
+    }
+    if (input.browserSearchItems && input.browserSearchItems.length > 0) {
+      searchableGroups.push({
+        value: "browser-search",
+        label: resolve(msg("Tabs and pins")),
+        items: input.browserSearchItems,
       });
     }
     if (input.projectSearchItems.length > 0) {

@@ -30,6 +30,9 @@ import { useBrowserDefaults } from "./browserDefaults";
 import { useBrowserPointerStore } from "./browserPointerStore";
 import { HostedBrowserWebview } from "./HostedBrowserWebview";
 import { openUrlInPreview } from "./openFileInPreview";
+import { openLinkInNewSession } from "./sessionLinkBus";
+import { previewBridge } from "~/components/preview/previewBridge";
+import { isSameSite, pinIdFromThreadId } from "~/pins/pinnedPages";
 import { rendersServerTabNatively } from "./previewRuntime";
 import { previewRuntimeTabId } from "./previewRuntimeTabId";
 
@@ -101,6 +104,17 @@ function openLinkInPreview({ tabId, url, background }: DesktopPreviewOpenLinkEve
     appAtomRegistry.get(primaryEnvironmentIdAtom),
   ).find((session) => session.runtimeTabId === tabId);
   if (!source) return;
+  // Pins stay on their own site; a link to another site starts a session.
+  const pinId = pinIdFromThreadId(source.threadRef.threadId);
+  if (pinId !== null) {
+    const current =
+      source.snapshot.navStatus._tag === "Idle" ? null : source.snapshot.navStatus.url;
+    if (current !== null && isSameSite(url, current)) {
+      void previewBridge?.navigate(tabId, url).catch(() => undefined);
+      return;
+    }
+    if (openLinkInNewSession(url)) return;
+  }
   void openUrlInPreview({
     threadRef: source.threadRef,
     url,

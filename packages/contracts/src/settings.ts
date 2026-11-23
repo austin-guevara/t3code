@@ -342,6 +342,15 @@ export const BrowserCustomSearchUrl = Schema.String.check(
   Schema.isMaxLength(BROWSER_CUSTOM_SEARCH_URL_MAX_LENGTH),
 );
 
+/** A page pinned to the top of the sidebar. `url` is where the pin returns to. */
+export const PinnedPage = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  url: Schema.String.check(Schema.isMaxLength(BROWSER_CUSTOM_SEARCH_URL_MAX_LENGTH)),
+  title: Schema.optionalKey(Schema.String),
+});
+export type PinnedPage = typeof PinnedPage.Type;
+export const MAX_PINNED_PAGES = 12;
+
 export const LoadBalancingWeights = Schema.Record(
   TrimmedNonEmptyString,
   Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
@@ -471,6 +480,7 @@ export const ClientSettingsSchema = Schema.Struct({
   browserDefaultProfileId: BrowserProfileId.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_PROFILE_ID)),
   ),
+  pinnedPages: Schema.Array(PinnedPage).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
 
   confirmQuit: QuitConfirmationModeSetting.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_QUIT_CONFIRMATION_MODE)),
@@ -2092,6 +2102,7 @@ export const ClientSettingsPatch = Schema.Struct({
   browserAutoShowFloatingPreview: Schema.optionalKey(Schema.Boolean),
   browserProfiles: Schema.optionalKey(Schema.Array(BrowserProfile)),
   browserDefaultProfileId: Schema.optionalKey(BrowserProfileId),
+  pinnedPages: Schema.optionalKey(Schema.Array(PinnedPage)),
   confirmQuit: Schema.optionalKey(QuitConfirmationMode),
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmTerminalClose: Schema.optionalKey(Schema.Boolean),

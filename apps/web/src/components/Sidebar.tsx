@@ -96,6 +96,7 @@ import {
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
 import { isElectron } from "../env";
+import { SidebarPinnedApps } from "../pins/SidebarPinnedApps";
 import {
   resolveShortcutCommand,
   shortcutLabelForCommand,
@@ -3069,6 +3070,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         className="min-h-full"
         fixedHeader={
           <SidebarGroup className="z-[1]">
+            <SidebarPinnedApps />
             <SidebarThreadHeader
               hasProjects={projectGroups.length > 0}
               projectScope={

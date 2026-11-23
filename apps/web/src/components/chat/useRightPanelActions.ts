@@ -27,7 +27,9 @@ import {
 } from "../../rightPanelStore";
 import { requestWorkspaceContentFocus, requestWorkspaceFocus } from "../../lib/workspaceFocus";
 import { setActivePreviewTab } from "../../previewStateStore";
-import { isBrowserSettingsReadError } from "../../browser/openFileInPreview";
+import { isBrowserSettingsReadError, openUrlInPreview } from "../../browser/openFileInPreview";
+import { useRouter } from "@tanstack/react-router";
+import { pinBrowserTab, pinnableUrl } from "../../pins/pinActions";
 import { addBrowserSurface } from "../preview/addBrowserSurface";
 import { focusActivePanelTerminal, focusTerminal } from "../../lib/terminalFocus";
 import { subscribePreviewAction } from "../preview/previewActionBus";
@@ -144,6 +146,27 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     if (snapshot) void createBrowserSurface(undefined, snapshot);
   };
   const duplicateBrowserSurfaceStable = useStableCallback(duplicateBrowserSurface);
+  const router = useRouter();
+  const pinBrowserSurface = (surface: RightPanelSurface) => {
+    if (surface.kind !== "preview" || !surface.resourceId || !activeThreadRef) return;
+    const snapshot = activePreviewState.sessions[surface.resourceId];
+    const url = pinnableUrl(snapshot);
+    if (!snapshot || !url) return;
+    const sourceRef = activeThreadRef;
+    const returnHref = router.state.location.href;
+    pinBrowserTab({
+      snapshot,
+      onPinned: (pinId) => {
+        closeRightPanelSurface(surface);
+        void router.navigate({ to: "/pin/$pinId", params: { pinId } });
+      },
+      restore: () => {
+        void openUrlInPreview({ threadRef: sourceRef, url, openPreview });
+        void router.navigate({ href: returnHref });
+      },
+    });
+  };
+  const pinBrowserSurfaceStable = useStableCallback(pinBrowserSurface);
   const createBrowserSurfaceStable = useStableCallback(createBrowserSurface);
   const addDiffSurface = () => {
     if (!activeThreadRef || !isServerThread || !diffAvailable) return;
@@ -399,6 +422,7 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     createBrowserSurface,
     createBrowserSurfaceStable,
     duplicateBrowserSurfaceStable,
+    pinBrowserSurfaceStable,
     moveRightPanelSurfaceStable,
     onOpenToolDiffStable,
     onOpenTurnDiffStable,

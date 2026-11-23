@@ -545,6 +545,9 @@ export function commandLabel(command: KeybindingCommand, resolve: MessageResolve
   const lateLabel = LATE_COMMAND_LABELS[command];
   if (lateLabel) return resolve(lateLabel);
   const raw = String(command);
+  if (raw.startsWith("pin.open.")) {
+    return resolve(msg("Pinned app: Open: {n}", { n: raw.slice("pin.open.".length) }));
+  }
   if (raw.startsWith("thread.jump.")) {
     return resolve(msg("Thread: Jump: {n}", { n: raw.slice("thread.jump.".length) }));
   }

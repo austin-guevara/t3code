@@ -8,6 +8,7 @@ import {
   type ResolvedKeybindingRule,
   type ResolvedKeybindingsConfig,
   THREAD_JUMP_KEYBINDING_COMMANDS,
+  PIN_OPEN_KEYBINDING_COMMANDS,
 } from "@t3tools/contracts";
 
 export {
@@ -146,6 +147,12 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
     key: `mod+${index + 1}`,
     command,
     when: "!modelPickerOpen && isDesktop",
+  })),
+  // Ctrl, not mod: Cmd+1-9 stays the thread jump.
+  ...PIN_OPEN_KEYBINDING_COMMANDS.map((command, index) => ({
+    key: `ctrl+${index + 1}`,
+    command,
+    when: "!modelPickerOpen && !terminalFocus",
   })),
   ...MODEL_PICKER_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({
     key: `mod+${index + 1}`,
