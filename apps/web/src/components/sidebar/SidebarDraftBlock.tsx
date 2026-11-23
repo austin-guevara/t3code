@@ -13,10 +13,14 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { useShallow } from "zustand/react/shallow";
 import { cn } from "~/lib/utils";
 import { useTerminalLabelsByThreadKey } from "~/state/terminalSessions";
+import { useActivePreviewSessions, useThreadPreviewState } from "~/previewStateStore";
+import { useRightPanelStore } from "~/rightPanelStore";
+import { usePreviewSession } from "../preview/usePreviewSession";
 import { resolveSidebarRowAccessibility } from "../Sidebar.logic";
 import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -58,6 +62,47 @@ export function useDraftTerminalLabels(): ReadonlyMap<string, string> {
   );
 }
 
+/**
+ * Drafts holding browser tabs, so a session that only browses is listed like one with a
+ * message. Panel tabs persist across reloads; live sessions cover tabs opened elsewhere.
+ */
+function useDraftBrowserThreadKeys(): ReadonlySet<string> {
+  const panelKeys = useRightPanelStore(
+    useShallow((store) =>
+      Object.entries(store.byThreadKey)
+        .filter(([, panel]) =>
+          panel.surfaces.some((surface) => surface.kind === "preview" && surface.resourceId),
+        )
+        .map(([threadKey]) => threadKey),
+    ),
+  );
+  const sessions = useActivePreviewSessions();
+  return new Set([...panelKeys, ...Object.keys(sessions)]);
+}
+
+/** The page a browse-only draft shows, loading its tabs when the draft is not open. */
+function DraftPageTitle(props: {
+  environmentId: EnvironmentId;
+  threadId: DraftSessionState["threadId"];
+  fallback: string;
+}) {
+  const ref = scopeThreadRef(props.environmentId, props.threadId);
+  usePreviewSession(ref);
+  const preview = useThreadPreviewState(ref);
+  const nav = preview.snapshot?.navStatus;
+  const title =
+    nav && nav._tag !== "Idle" ? nav.title?.trim() || hostOf(nav.url) || props.fallback : null;
+  return <>{title ?? props.fallback}</>;
+}
+
+function hostOf(url: string): string | null {
+  try {
+    return new URL(url).host || null;
+  } catch {
+    return null;
+  }
+}
+
 export function draftTerminalLabel(
   session: DraftSessionState,
   terminalLabels: ReadonlyMap<string, string>,
@@ -69,6 +114,8 @@ const SidebarDraftRow = memo(function SidebarDraftRow(props: {
   draftId: DraftId;
   composer: ComposerThreadDraftState | null;
   terminalLabel: string | null;
+  /** Set when the draft holds browser tabs; it then shows the page it is on. */
+  browserThread: { environmentId: EnvironmentId; threadId: DraftSessionState["threadId"] } | null;
   project: ProjectFaviconProject | null;
   projectDisplayName: string | null;
   isActive: boolean;
@@ -100,14 +147,21 @@ const SidebarDraftRow = memo(function SidebarDraftRow(props: {
     composer.terminalContexts.length +
     composer.previewAnnotations.length +
     composer.reviewComments.length;
+  const showsPage =
+    promptPreview.length === 0 &&
+    attachmentCount === 0 &&
+    props.terminalLabel === null &&
+    props.browserThread !== null;
   const preview =
     promptPreview.length > 0
       ? promptPreview
       : attachmentCount === 0 && props.terminalLabel !== null
         ? props.terminalLabel
-        : gt("{count, plural, one {{count} attachment} other {{count} attachments}}", {
-            count: attachmentCount,
-          });
+        : showsPage
+          ? gt("New session")
+          : gt("{count, plural, one {{count} attachment} other {{count} attachments}}", {
+              count: attachmentCount,
+            });
   const accessibility = resolveSidebarRowAccessibility({
     title: preview,
     statusLabel: gt("Unsent draft"),
@@ -190,7 +244,13 @@ const SidebarDraftRow = memo(function SidebarDraftRow(props: {
               {props.jumpLabel ? <JumpHintBadge label={props.jumpLabel} /> : null}
             </span>
           </div>
-          <div className="mt-0.5 truncate text-sm font-medium text-foreground/90">{preview}</div>
+          <div className="mt-0.5 truncate text-sm font-medium text-foreground/90">
+            {showsPage && props.browserThread ? (
+              <DraftPageTitle {...props.browserThread} fallback={preview} />
+            ) : (
+              preview
+            )}
+          </div>
         </div>
       </div>
     </li>
@@ -225,6 +285,7 @@ export function useSidebarDrafts(
   }
   const routeDraftComposer =
     frozenRoute.routeDraftId === routeDraftId ? frozenRoute.composer : null;
+  const browserThreadKeys = useDraftBrowserThreadKeys();
   const draftIds = useComposerDraftStore(
     useShallow((store) => {
       const listed: [string, DraftSessionState][] = [];
@@ -239,6 +300,9 @@ export function useSidebarDrafts(
         // Composer edits stay frozen while open; terminals come and go live.
         const isListed =
           draftTerminalLabel(session, terminalLabels) !== null ||
+          browserThreadKeys.has(
+            scopedThreadKey(scopeThreadRef(session.environmentId, session.threadId)),
+          ) ||
           (draftKey === routeDraftId
             ? routeDraftComposer !== null
             : composerDraftHasUserContent(store.draftsByThreadKey[draftKey]));
@@ -267,6 +331,7 @@ export const SidebarDraftBlock = memo(function SidebarDraftBlock(props: {
   ) => void;
 }) {
   const draftThreadsByThreadKey = useComposerDraftStore((store) => store.draftThreadsByThreadKey);
+  const browserThreadKeys = useDraftBrowserThreadKeys();
   const draftsByThreadKey = useComposerDraftStore(
     useShallow((store) =>
       Object.fromEntries(
@@ -295,6 +360,13 @@ export const SidebarDraftBlock = memo(function SidebarDraftBlock(props: {
             draftId={draftId}
             composer={composer}
             terminalLabel={draftTerminalLabel(session, props.terminalLabels)}
+            browserThread={
+              browserThreadKeys.has(
+                scopedThreadKey(scopeThreadRef(session.environmentId, session.threadId)),
+              )
+                ? { environmentId: session.environmentId, threadId: session.threadId }
+                : null
+            }
             project={props.projectByKey.get(projectKey) ?? null}
             projectDisplayName={props.projectDisplayNameByKey.get(projectKey) ?? null}
             isActive={draftId === props.routeDraftId}
