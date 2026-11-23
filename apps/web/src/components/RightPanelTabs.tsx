@@ -170,6 +170,8 @@ export interface RightPanelTabsProps {
   /** Overrides the default reason while side chats are available but cannot start. */
   sideChatDisabledReason?: string | null;
   pullRequestStatusSeeds?: Readonly<Record<string, PullRequestTabStatusSeed>>;
+  /** Full screen leads the strip with the thread's chat; `active` hides the surface content. */
+  chatTab?: { active: boolean; onSelect: () => void } | undefined;
   children: ReactNode;
 }
 
@@ -1121,6 +1123,28 @@ function RightPanelTab(
   );
 }
 
+function ChatTab(props: { active: boolean; ownsDesktopTitleBar: boolean; onSelect: () => void }) {
+  return (
+    <button
+      type="button"
+      data-active-tab={props.active}
+      data-chat-tab
+      aria-pressed={props.active}
+      onClick={props.onSelect}
+      className={cn(
+        "cursor-pointer flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs",
+        props.ownsDesktopTitleBar && "[-webkit-app-region:no-drag]",
+        props.active
+          ? "bg-accent text-foreground"
+          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+      )}
+    >
+      <MessagesSquare className="size-3.5" />
+      <T>Chat</T>
+    </button>
+  );
+}
+
 export function RightPanelTabs(props: RightPanelTabsProps) {
   const gt = useGT();
   const messages = useMessages();
@@ -1500,6 +1524,16 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           data-right-panel-tab-list
         >
           <div className="flex h-full w-max min-w-full items-center gap-1">
+            {props.chatTab ? (
+              <>
+                <ChatTab
+                  active={props.chatTab.active}
+                  ownsDesktopTitleBar={ownsDesktopTitleBar}
+                  onSelect={props.chatTab.onSelect}
+                />
+                <span aria-hidden className="mx-0.5 h-4 w-px shrink-0 bg-border" />
+              </>
+            ) : null}
             <SortableTabList surfaces={props.surfaces} onMove={props.onMoveSurface}>
               {props.surfaces.map((surface) => {
                 const previewTabId = previewTabIdOf(surface, props.previewSessions);
@@ -1513,7 +1547,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                     key={surface.id}
                     surface={surface}
                     dragDisabled={!props.onMoveSurface || renamingDevice === surface.id}
-                    active={surface.id === props.activeSurfaceId}
+                    active={surface.id === props.activeSurfaceId && !props.chatTab?.active}
                     pending={props.pendingSurfaceIds.has(surface.id)}
                     title={surfaceTitle(
                       surface,
@@ -1680,8 +1714,11 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           />
         ) : null}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col" data-right-panel-surface-content>
-        {props.activeSurfaceId === null ? (
+      <div
+        className={cn("flex min-h-0 flex-1 flex-col", props.chatTab?.active && "hidden")}
+        data-right-panel-surface-content
+      >
+        {props.chatTab?.active ? null : props.activeSurfaceId === null ? (
           <RightPanelEmptyState
             onAddBrowser={props.onAddBrowser}
             onAddBrowserInProfile={props.onAddBrowserInProfile}

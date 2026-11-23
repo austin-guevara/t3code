@@ -41,6 +41,27 @@ async function reloadRightPanelStore() {
 }
 
 describe("rightPanelStore", () => {
+  it("shows the chat tab in full screen, snaps an empty chat beside its page, and Esc returns", () => {
+    const store = useRightPanelStore.getState();
+    const state = () =>
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    store.openBrowser(refA, "tab-1");
+    store.setMaximized(refA, true);
+
+    store.showChat(refA, false);
+    expect(state()).toMatchObject({ maximized: true, chatShown: true });
+    store.activateSurface(refA, "browser:tab-1");
+    expect(state().chatShown).toBeUndefined();
+
+    store.showChat(refA, true);
+    expect(state().maximized).toBeUndefined();
+    expect(state().snapped).toBe(true);
+    expect(store.unsnap(refA)).toBe(true);
+    expect(state()).toMatchObject({ maximized: true });
+    expect(state().snapped).toBeUndefined();
+    expect(store.unsnap(refA)).toBe(false);
+  });
+
   it("opens a hosted side chat's panel actions in its parent's panel until unhosted", () => {
     const store = useRightPanelStore.getState();
     const unhost = hostRightPanel(refB, refA);

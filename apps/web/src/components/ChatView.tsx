@@ -308,6 +308,7 @@ import {
 import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
 import { useCitedHistory } from "./chat/citationProcedure";
 import type { MessagesTimelineHistoryControls } from "./chat/MessagesTimeline";
+import { SnappedChatClose } from "./chat/SnappedChatClose";
 import { ThreadTimeline } from "./chat/ThreadTimeline";
 import { NativeChildWorkDialog } from "./chat/NativeChildWorkDialog";
 import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
@@ -1190,6 +1191,9 @@ export default function ChatView(props: ChatViewProps) {
   // An embedded side chat has no panel; a stale maximized flag would hide its own column.
   const rightPanelMaximized =
     !embedded && canMaximizeRightPanel && rightPanelState.maximized === true;
+  // Full screen keeps the chat as the strip's first tab; selecting it shows the chat full width.
+  const rightPanelChatShown = rightPanelMaximized && rightPanelState.chatShown === true;
+  const chatColumnHidden = rightPanelMaximized && !rightPanelChatShown;
   const inlineRightPanelOwnsTitleBar = rightPanelOpen && !shouldUsePlanSidebarSheet;
   const [threadPanelPopoverHandle] = useState(PopoverCreateHandle);
   const [chatCanvasStore] = useState(createChatCanvasStore);
@@ -3506,10 +3510,17 @@ export default function ChatView(props: ChatViewProps) {
     addFolders: addDroppedFoldersToComposer,
   });
 
+  const rightPanelSnapped =
+    !embedded && rightPanelOpen && rightPanelState.snapped === true && timelineEmpty;
   const content = (
     <div
       ref={setWorkspaceLayoutElement}
-      className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
+      className={cn(
+        "relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background",
+        // The tab strip stays across the top while the chat tab fills the space below it.
+        rightPanelChatShown &&
+          "[&>[data-preview-panel-mode=inline]]:absolute [&>[data-preview-panel-mode=inline]]:inset-x-0 [&>[data-preview-panel-mode=inline]]:top-0 [&>[data-preview-panel-mode=inline]]:z-10 [&>[data-preview-panel-mode=inline]]:h-auto",
+      )}
     >
       {embedded ? null : (
         <DeviceSetupDialogHost
@@ -3521,14 +3532,18 @@ export default function ChatView(props: ChatViewProps) {
       {rightPanelControlsAtRoot && !embedded ? panelLayoutControls : null}
       <div
         className={cn(
-          "flex min-h-0 min-w-0 flex-col overflow-x-hidden",
-          rightPanelMaximized ? "w-0 flex-none" : "flex-1",
+          "relative flex min-h-0 min-w-0 flex-col overflow-x-hidden",
+          chatColumnHidden ? "w-0 flex-none" : "flex-1",
+          rightPanelChatShown && "pt-(--workspace-topbar-height)",
         )}
-        data-chat-column-maximized-away={rightPanelMaximized ? "true" : "false"}
+        data-chat-column-maximized-away={chatColumnHidden ? "true" : "false"}
         data-chat-column
-        inert={rightPanelMaximized}
+        inert={chatColumnHidden}
         onMouseUp={preventMiddleClickPasteOutsideEditable}
       >
+        {rightPanelSnapped && activeThreadRef ? (
+          <SnappedChatClose threadRef={activeThreadRef} />
+        ) : null}
         {embedded ? null : (
           <header
             ref={threadPanelPopoverAnchorRef}
@@ -3544,6 +3559,7 @@ export default function ChatView(props: ChatViewProps) {
                   )
                 : "flex h-[var(--workspace-topbar-height)] min-h-[var(--workspace-topbar-height)] shrink-0 items-center pl-(--workspace-gutter-start) pr-(--workspace-gutter-end)",
               COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
+              rightPanelChatShown && "hidden",
             )}
           >
             {isElectron && rightPanelControlsAtRoot ? (
@@ -4202,6 +4218,17 @@ export default function ChatView(props: ChatViewProps) {
           keybindings={keybindings}
           getShortcutContext={getShortcutContextStable}
           maximized={rightPanelMaximized}
+          chatTab={
+            rightPanelMaximized
+              ? {
+                  active: rightPanelChatShown,
+                  onSelect: () => {
+                    if (activeThreadRef)
+                      useRightPanelStore.getState().showChat(activeThreadRef, timelineEmpty);
+                  },
+                }
+              : undefined
+          }
           layoutControls={
             rightPanelOpen ? (
               <div className="mr-px flex items-center gap-1">

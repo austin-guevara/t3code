@@ -155,7 +155,7 @@ export const RightPanelMaximizeControl = memo(function RightPanelMaximizeControl
   onToggle: () => void;
 }) {
   const gt = useGT();
-  const label = maximized ? gt("Restore panel size") : gt("Maximize panel");
+  const label = maximized ? gt("Exit full screen") : gt("Full screen");
   return (
     <Tooltip>
       <TooltipTrigger

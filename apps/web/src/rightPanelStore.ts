@@ -156,6 +156,10 @@ export interface ThreadRightPanelState {
   surfaces: RightPanelSurface[];
   dismissedDeviceSurfaceIds?: string[];
   maximized?: true;
+  /** Full screen shows the chat as the first tab; set while that tab is selected. */
+  chatShown?: true;
+  /** Docked by selecting the chat tab of an empty chat; Esc returns to full screen. */
+  snapped?: true;
   proactiveDiffTurnId?: RunId;
 }
 
@@ -256,6 +260,10 @@ interface RightPanelStoreState {
   show: (ref: ScopedThreadRef) => void;
   close: (ref: ScopedThreadRef) => void;
   setMaximized: (ref: ScopedThreadRef, maximized: boolean) => void;
+  /** Selects the chat tab in full screen; an empty chat docks beside its page instead. */
+  showChat: (ref: ScopedThreadRef, chatEmpty: boolean) => void;
+  /** Returns a snapped chat to full screen. */
+  unsnap: (ref: ScopedThreadRef) => boolean;
   toggleVisibility: (ref: ScopedThreadRef) => void;
   toggle: (
     ref: ScopedThreadRef,
@@ -432,7 +440,7 @@ const updateThreadStateMap = (
   updater: (current: ThreadRightPanelState) => ThreadRightPanelState,
 ): Record<string, ThreadRightPanelState> => {
   const current = byThreadKey[threadKey] ?? EMPTY_THREAD_STATE;
-  const next = updater(current);
+  const next = withLayoutInvariants(updater(current));
   if (
     !next.isOpen &&
     next.activeSurfaceId === null &&
@@ -446,6 +454,19 @@ const updateThreadStateMap = (
   }
   if (next === current) return byThreadKey;
   return { ...byThreadKey, [threadKey]: next };
+};
+
+// The chat tab only exists in full screen, and a snap only lasts while docked.
+const withLayoutInvariants = (next: ThreadRightPanelState): ThreadRightPanelState => {
+  const dropChat = next.chatShown && (!next.maximized || !next.isOpen);
+  const dropSnap = next.snapped && (next.maximized || !next.isOpen);
+  if (!dropChat && !dropSnap) return next;
+  const { chatShown, snapped, ...rest } = next;
+  return {
+    ...rest,
+    ...(chatShown && !dropChat ? { chatShown } : {}),
+    ...(snapped && !dropSnap ? { snapped } : {}),
+  };
 };
 
 const updateThreadPanelVisibilityMap = (
@@ -542,8 +563,11 @@ const userActionOnThread = (
   closesView: boolean,
 ): Partial<RightPanelStoreState> => ({
   ...updateThread(state, threadKey, (current) => {
-    const next = updater(current);
-    if (next === current) return current;
+    const updated = updater(current);
+    if (updated === current) return current;
+    // Opening or choosing another tab leaves the chat tab; agent reveals do not.
+    const next =
+      updated.activeSurfaceId !== current.activeSurfaceId ? withoutChatTab(updated) : updated;
     const removedDevices = current.surfaces.filter(
       (surface) =>
         surface.kind === "device" && !next.surfaces.some((entry) => entry.id === surface.id),
@@ -577,6 +601,12 @@ const activated = (current: ThreadRightPanelState, surfaceId: string): ThreadRig
   current.surfaces.some((surface) => surface.id === surfaceId)
     ? { ...current, isOpen: true, activeSurfaceId: surfaceId }
     : current;
+
+const withoutChatTab = (current: ThreadRightPanelState): ThreadRightPanelState => {
+  if (!current.chatShown) return current;
+  const { chatShown: _chatShown, ...rest } = current;
+  return rest;
+};
 
 const closeAction = (
   state: RightPanelStoreState,
@@ -1157,7 +1187,9 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         ),
       activateSurface: (ref, surfaceId) =>
         set((state) =>
-          userAction(state, scopedThreadKey(ref), (current) => activated(current, surfaceId)),
+          userAction(state, scopedThreadKey(ref), (current) =>
+            withoutChatTab(activated(current, surfaceId)),
+          ),
         ),
       revealSurface: (ref, surfaceId) =>
         set((state) =>
@@ -1307,6 +1339,28 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             return maximized ? { ...rest, maximized: true } : rest;
           }),
         ),
+      showChat: (ref, chatEmpty) =>
+        set((state) =>
+          userAction(state, scopedThreadKey(ref), (current) => {
+            if (!current.maximized || current.chatShown) return current;
+            if (chatEmpty && current.activeSurfaceId !== null) {
+              const { maximized: _maximized, ...rest } = current;
+              return { ...rest, snapped: true };
+            }
+            return { ...current, chatShown: true };
+          }),
+        ),
+      unsnap: (ref) => {
+        const key = scopedThreadKey(ref);
+        if (!get().byThreadKey[key]?.snapped) return false;
+        set((state) =>
+          userAction(state, key, (current) => {
+            const { snapped: _snapped, ...rest } = current;
+            return { ...rest, maximized: true };
+          }),
+        );
+        return true;
+      },
       toggleVisibility: (ref) =>
         set((state) =>
           userAction(state, scopedThreadKey(ref), (current) => ({
