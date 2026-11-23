@@ -172,6 +172,8 @@ export interface RightPanelTabsProps {
   pullRequestStatusSeeds?: Readonly<Record<string, PullRequestTabStatusSeed>>;
   /** Full screen leads the strip with the thread's chat; `active` hides the surface content. */
   chatTab?: { active: boolean; onSelect: () => void } | undefined;
+  /** The new tab shortcut opens a browser tab with this; the + menu offers every kind. */
+  onNewTab?: (() => void) | undefined;
   children: ReactNode;
 }
 
@@ -1177,15 +1179,20 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     if (addSurfaceMenuBlocked()) return;
     event.preventDefault();
     event.stopPropagation();
-    if (!event.repeat) {
-      addSurfaceTriggerRef.current?.focus();
-      setAddSurfaceMenuOpen(true);
+    if (event.repeat) return;
+    if (props.onNewTab && props.browserAvailable) {
+      props.onNewTab();
+      return;
     }
+    addSurfaceTriggerRef.current?.focus();
+    setAddSurfaceMenuOpen(true);
   });
   // Forwarded from a focused browser page. Focusing the trigger here would let ChatView's
   // window-focus handler see a plain button and refocus the composer, closing the menu.
   const onMenuAction = useEffectEvent((action: string) => {
-    if (action === "rightPanel.new" && !addSurfaceMenuBlocked()) setAddSurfaceMenuOpen(true);
+    if (action !== "rightPanel.new" || addSurfaceMenuBlocked()) return;
+    if (props.onNewTab && props.browserAvailable) props.onNewTab();
+    else setAddSurfaceMenuOpen(true);
   });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes document keydown and the desktop menu action (forwarded from a focused browser page) for the new surface shortcut while the panel is open
   useEffect(() => {

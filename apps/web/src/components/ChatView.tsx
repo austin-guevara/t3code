@@ -2527,6 +2527,8 @@ export default function ChatView(props: ChatViewProps) {
     toggleRightPanelStable,
     toggleThreadPanelStable,
     shortcuts: rightPanelShortcuts,
+    openNewBrowserTabStable,
+    cycleRightPanelTabStable,
   } = useRightPanelActions({
     activeThreadRef,
     activeProject,
@@ -2546,6 +2548,7 @@ export default function ChatView(props: ChatViewProps) {
     rightPanelOpen,
     canMaximizeRightPanel,
     rightPanelMaximized,
+    chatEmpty: timelineEmpty,
     supportsPullRequests,
     pullRequestsSurfaceAvailable: linkedItemsSurfaceAvailable,
     gitCwd,
@@ -2940,8 +2943,13 @@ export default function ChatView(props: ChatViewProps) {
         const next = logicalProjectEnvironments[(index + 1) % logicalProjectEnvironments.length];
         if (next) onEnvironmentChangeStable(next.environmentId);
       },
-      "thread.steerQueuedMessage": ({ event }) =>
-        routeKind !== "draft" && queuedRunsControlRef.current?.steerNext(event.repeat) === true,
+      "thread.steerQueuedMessage": ({ event }) => {
+        if (routeKind !== "draft" && queuedRunsControlRef.current?.steerNext(event.repeat) === true)
+          return true;
+        // Full screen shares this shortcut; with nothing queued it switches layouts.
+        if (!canMaximizeRightPanel) return false;
+        if (!event.repeat) toggleRightPanelMaximizedStable();
+      },
       "thread.editQueuedMessage": ({ event }) =>
         routeKind !== "draft" &&
         composerRef.current?.isCaretAtStart() === true &&
@@ -2971,6 +2979,9 @@ export default function ChatView(props: ChatViewProps) {
       if (action === "rightPanel.toggle") toggleRightPanelStable();
       else if (action === "rightPanel.toggleMaximized") toggleRightPanelMaximizedStable();
       else if (action === "rightPanel.close") closeActiveRightPanelSurfaceStable();
+      else if (action === "browser.newTab") void openNewBrowserTabStable();
+      else if (action === "rightPanel.nextTab") cycleRightPanelTabStable(1);
+      else if (action === "rightPanel.previousTab") cycleRightPanelTabStable(-1);
     });
   }, [
     embedded,
@@ -2978,6 +2989,8 @@ export default function ChatView(props: ChatViewProps) {
     toggleRightPanelStable,
     toggleRightPanelMaximizedStable,
     closeActiveRightPanelSurfaceStable,
+    openNewBrowserTabStable,
+    cycleRightPanelTabStable,
   ]);
 
   usePasteToFocusComposer(embedded ? null : activeThreadId, composerRef);
@@ -4260,7 +4273,8 @@ export default function ChatView(props: ChatViewProps) {
           onCloseAllSurfaces={closeAllRightPanelSurfacesStable}
           onMoveSurface={moveRightPanelSurfaceStable}
           onCopyFilePath={copyRightPanelFilePathStable}
-          onAddBrowser={() => createBrowserSurface()}
+          onAddBrowser={() => void createBrowserSurface()}
+          onNewTab={() => void openNewBrowserTabStable()}
           onAddBrowserInProfile={createBrowserSurfaceStable}
           onDuplicateBrowser={duplicateBrowserSurfaceStable}
           onAddTerminal={addTerminalSurfaceStable}

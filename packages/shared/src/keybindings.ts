@@ -68,6 +68,10 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+alt+b", command: "rightPanel.toggle" },
   { key: "mod+shift+b", command: "threadPanel.toggle", when: "!terminalFocus" },
   { key: "mod+t", command: "rightPanel.new", when: "rightPanelOpen && !terminalFocus" },
+  // A new tab is a browser tab; the + menu still offers the other kinds.
+  { key: "mod+t", command: "browser.newTab", when: "!terminalFocus" },
+  { key: "mod+alt+arrowright", command: "rightPanel.nextTab", when: "!terminalFocus" },
+  { key: "mod+alt+arrowleft", command: "rightPanel.previousTab", when: "!terminalFocus" },
   { key: "mod+d", command: "terminal.split", when: "terminalFocus" },
   { key: "mod+shift+d", command: "terminal.splitVertical", when: "terminalFocus" },
   { key: "mod+shift+d", command: "composer.dictation", when: "!terminalFocus" },

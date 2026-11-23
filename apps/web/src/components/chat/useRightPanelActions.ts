@@ -21,6 +21,7 @@ import { useDiffPanelStore } from "../../diffPanelStore";
 import { type ThreadPanelPresentation } from "../../rightPanelLayout";
 import {
   selectThreadPanelOpen,
+  selectThreadRightPanelState,
   type RightPanelSurface,
   useRightPanelStore,
 } from "../../rightPanelStore";
@@ -60,6 +61,8 @@ interface RightPanelActionsInput {
   readonly rightPanelOpen: boolean;
   readonly canMaximizeRightPanel: boolean;
   readonly rightPanelMaximized: boolean;
+  /** No messages yet; choosing the chat tab then docks it beside the page. */
+  readonly chatEmpty: boolean;
   readonly supportsPullRequests: boolean;
   readonly pullRequestsSurfaceAvailable: boolean;
   readonly gitCwd: string | null;
@@ -93,6 +96,7 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     rightPanelOpen,
     canMaximizeRightPanel,
     rightPanelMaximized,
+    chatEmpty,
     supportsPullRequests,
     pullRequestsSurfaceAvailable,
     gitCwd,
@@ -114,8 +118,8 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
   };
   const onToggleDiffStable = useStableCallback(onToggleDiff);
   const createBrowserSurface = (profileId?: string, duplicateFrom?: PreviewSessionSnapshot) => {
-    if (!activeThreadRef || !canOperatePreview) return;
-    void addBrowserSurface({
+    if (!activeThreadRef || !canOperatePreview) return Promise.resolve();
+    return addBrowserSurface({
       threadRef: activeThreadRef,
       openPreview,
       ...(profileId === undefined ? {} : { profileId }),
@@ -137,7 +141,7 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
   const duplicateBrowserSurface = (surface: RightPanelSurface) => {
     if (surface.kind !== "preview" || !surface.resourceId) return;
     const snapshot = activePreviewState.sessions[surface.resourceId];
-    if (snapshot) createBrowserSurface(undefined, snapshot);
+    if (snapshot) void createBrowserSurface(undefined, snapshot);
   };
   const duplicateBrowserSurfaceStable = useStableCallback(duplicateBrowserSurface);
   const createBrowserSurfaceStable = useStableCallback(createBrowserSurface);
@@ -269,6 +273,36 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     useRightPanelStore.getState().setMaximized(activeThreadRef, !rightPanelMaximized);
   };
   const toggleRightPanelMaximizedStable = useStableCallback(toggleRightPanelMaximized);
+  const openNewBrowserTab = async () => {
+    if (!activeThreadRef || !canOperatePreview || !browserAvailable) return false;
+    await createBrowserSurface();
+    requestWorkspaceFocus({
+      area: "panel",
+      selector: "[data-right-panel-surface-content] [data-preview-url-input]",
+    });
+    return true;
+  };
+  // Full screen cycles through the chat tab too.
+  const cycleRightPanelTab = (direction: 1 | -1) => {
+    if (!activeThreadRef || !rightPanelOpen) return false;
+    const store = useRightPanelStore.getState();
+    const panel = selectThreadRightPanelState(store.byThreadKey, activeThreadRef);
+    const order: Array<RightPanelSurface | "chat"> = [
+      ...(rightPanelMaximized ? (["chat"] as const) : []),
+      ...panel.surfaces,
+    ];
+    if (order.length < 2) return false;
+    const current =
+      rightPanelMaximized && panel.chatShown
+        ? 0
+        : order.findIndex((entry) => entry !== "chat" && entry.id === panel.activeSurfaceId);
+    const next = order[(Math.max(current, 0) + direction + order.length) % order.length]!;
+    if (next === "chat") store.showChat(activeThreadRef, chatEmpty);
+    else activateRightPanelSurface(next);
+    return true;
+  };
+  const openNewBrowserTabStable = useStableCallback(openNewBrowserTab);
+  const cycleRightPanelTabStable = useStableCallback(cycleRightPanelTab);
   const moveRightPanelSurface = (surfaceId: string, toIndex: number) => {
     if (activeThreadRef)
       useRightPanelStore.getState().moveSurface(activeThreadRef, surfaceId, toIndex);
@@ -342,10 +376,18 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
       if (!event.repeat) closeRightPanelSurface(activeRightPanelSurface);
     },
     "diff.toggle": () => onToggleDiff(),
+    "browser.newTab": ({ event }) => {
+      if (!activeThreadRef || !canOperatePreview || !browserAvailable) return false;
+      if (!event.repeat) void openNewBrowserTab();
+    },
+    "rightPanel.nextTab": () => cycleRightPanelTab(1),
+    "rightPanel.previousTab": () => cycleRightPanelTab(-1),
   } satisfies ChatShortcutCommands;
 
   return {
     shortcuts,
+    openNewBrowserTabStable,
+    cycleRightPanelTabStable,
     activateRightPanelSurfaceStable,
     addDeviceSurfaceStable,
     addDiffSurfaceStable,
