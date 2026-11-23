@@ -1,6 +1,11 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { m } from "~/i18n/messages";
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import {
+  parseScopedThreadKey,
+  scopedThreadKey,
+  scopeProjectRef,
+  scopeThreadRef,
+} from "@t3tools/client-runtime/environment";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -16,7 +21,13 @@ import * as Stream from "effect/Stream";
 import { useGT } from "gt-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { bestSessionForLink, type LinkRoutingCandidate } from "../../browser/linkRouting";
 import { openFileInPreview, openUrlInPreview } from "../../browser/openFileInPreview";
+import { onOpenLinkInNewSession, openLinkInNewSession } from "../../browser/sessionLinkBus";
+import { draftIdForThread, navigateToSession } from "../../browser/sessionRoutes";
+import { pinIdFromThreadId } from "../../pins/pinnedPages";
+import { readActivePreviewSessions, readThreadPreviewState } from "../../previewStateStore";
+import { closePreviewSession } from "../preview/closePreviewSession";
 import { isPreviewAvailableFor } from "../../browser/previewRuntime";
 import { requestConfirmDialog } from "../../confirmDialog";
 import { connectPairing } from "../../connection/onboarding";
@@ -30,7 +41,7 @@ import { selectActiveRightPanelSurface, useRightPanelStore } from "../../rightPa
 import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { resolveThreadRouteTarget } from "../../threadRoutes";
 import { assetEnvironment } from "../../state/assets";
-import { readProject, readThreadShell } from "../../state/entities";
+import { readProject, readThreadShell, readThreadShells } from "../../state/entities";
 import { useEnvironmentHttpBaseUrl, usePrimaryEnvironment } from "../../state/environments";
 import { previewEnvironment } from "../../state/preview";
 import { allReachableShellsLiveAtom } from "../../state/shell";
@@ -81,6 +92,29 @@ function threadShowingBrowser(
   return surface?.kind === "preview" ? threadRef : null;
 }
 
+/** Open sessions an outside link could join: threads in use and drafts holding tabs. */
+function linkRoutingCandidates(): LinkRoutingCandidate<ScopedThreadRef>[] {
+  const byKey = new Map<string, LinkRoutingCandidate<ScopedThreadRef>>();
+  for (const shell of readThreadShells()) {
+    if (shell.archivedAt !== null || shell.settledAt !== null) continue;
+    const ref = scopeThreadRef(shell.environmentId, shell.id);
+    byKey.set(scopedThreadKey(ref), { key: ref, title: shell.title, tabs: [] });
+  }
+  for (const [threadKey, state] of Object.entries(readActivePreviewSessions())) {
+    const ref = parseScopedThreadKey(threadKey);
+    if (!ref || pinIdFromThreadId(ref.threadId) !== null) continue;
+    const existing = byKey.get(threadKey);
+    if (!existing && draftIdForThread(ref) === null) continue;
+    const tabs = Object.values(state.sessions).flatMap((snapshot) =>
+      snapshot.navStatus._tag === "Idle"
+        ? []
+        : [{ url: snapshot.navStatus.url, title: snapshot.navStatus.title ?? null }],
+    );
+    byKey.set(threadKey, { key: ref, title: existing?.title ?? null, tabs });
+  }
+  return [...byKey.values()];
+}
+
 export function DesktopWebLinkCoordinator() {
   const router = useRouter();
   const gt = useGT();
@@ -90,6 +124,7 @@ export function DesktopWebLinkCoordinator() {
   const { scratchEnvironmentId, openScratchProject } = useScratchProject();
   const openThread = useNewThreadHandler();
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
+  const closePreview = useAtomCommand(previewEnvironment.close, { reportFailure: false });
   const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
     reportFailure: false,
     refresh: true,
@@ -169,19 +204,18 @@ export function DesktopWebLinkCoordinator() {
     return threadRef;
   };
 
-  const openInBrowser = useEffectEvent(async (url: string) => {
-    const routeParams = router.state.matches.at(-1)?.params ?? {};
-    const isFile = url.startsWith("file:");
-    // Only this machine's environment serves files, so fail before starting a thread.
-    if (isFile && httpBaseUrl === null) {
-      reportFailure(url);
-      return;
-    }
+  const showThread = (threadRef: ScopedThreadRef) =>
+    void navigateToSession(router.navigate, threadRef);
+
+  const openInSession = async (
+    url: string,
+    isFile: boolean,
+    routeParams: Record<string, string | undefined>,
+  ) => {
     const threadRef =
-      threadShowingBrowser(
-        routeParams,
-        isFile ? (primaryEnvironment?.environmentId ?? null) : null,
-      ) ?? (await startThread(url));
+      (isFile
+        ? threadShowingBrowser(routeParams, primaryEnvironment?.environmentId ?? null)
+        : null) ?? (await startThread(url));
     if (threadRef === null) return;
     const result = isFile
       ? httpBaseUrl === null
@@ -203,7 +237,55 @@ export function DesktopWebLinkCoordinator() {
       const error = squashAtomCommandFailure(result);
       reportFailure(url, thrownErrorMessage(error, m) ?? url);
     }
-  });
+  };
+
+  // A link placed in an existing session can still be moved to a session of its own.
+  const offerOwnSession = (url: string, threadRef: ScopedThreadRef, tabId: string | null) => {
+    const shell = readThreadShell(threadRef);
+    const id = toastManager.add({
+      type: "info",
+      timeout: 10_000,
+      title: shell?.title
+        ? gt("Opened in “{title}”", { title: shell.title })
+        : gt("Opened in an open session"),
+      actionProps: {
+        children: gt("Open in its own session"),
+        onClick: () => {
+          toastManager.close(id);
+          if (tabId !== null) {
+            const snapshot = readThreadPreviewState(threadRef).sessions[tabId] ?? null;
+            void closePreviewSession({ closePreview, snapshot, tabId, threadRef });
+          }
+          openLinkInNewSession(url);
+        },
+      },
+    });
+  };
+
+  const openInBrowser = useEffectEvent(
+    async (url: string, options: { ownSession?: boolean } = {}) => {
+      const routeParams = router.state.matches.at(-1)?.params ?? {};
+      const isFile = url.startsWith("file:");
+      // Only this machine's environment serves files, so fail before starting a thread.
+      if (isFile && httpBaseUrl === null) {
+        reportFailure(url);
+        return;
+      }
+      const matched =
+        isFile || options.ownSession ? null : bestSessionForLink(url, linkRoutingCandidates());
+      if (matched !== null) {
+        const result = await openUrlInPreview({ threadRef: matched, url, openPreview });
+        if (result._tag === "Failure") {
+          reportFailure(url, thrownErrorMessage(squashAtomCommandFailure(result), m) ?? url);
+          return;
+        }
+        showThread(matched);
+        offerOwnSession(url, matched, readThreadPreviewState(matched).activeTabId);
+        return;
+      }
+      await openInSession(url, isFile, routeParams);
+    },
+  );
 
   const openLink = useEffectEvent(async (url: string) => {
     const pairingUrl = readPairingAppLink(url);
@@ -267,6 +349,17 @@ export function DesktopWebLinkCoordinator() {
       unsubscribe();
     };
   }, [ready, webLinks]);
+
+  const openOwnSession = useEffectEvent((url: string) => {
+    queueRef.current = queueRef.current
+      .then(() => openInBrowser(url, { ownSession: true }))
+      .catch(() => undefined);
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- listens for in-app links that need a session of their own, such as off-site links from a pin
+  useEffect(() => {
+    if (!ready) return;
+    return onOpenLinkInNewSession(openOwnSession);
+  }, [ready]);
 
   return null;
 }
