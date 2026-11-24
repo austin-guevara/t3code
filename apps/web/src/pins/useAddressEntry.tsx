@@ -16,7 +16,9 @@ export interface AddressEntryItem {
   readonly run?: () => void | Promise<void>;
 }
 
-const MAX_PROMPT_LENGTH = 200;
+// Past this, text reads as a message: a few words at most, with no sentence punctuation.
+const MAX_QUERY_LENGTH = 40;
+const MAX_QUERY_WORDS = 4;
 const MAX_MATCHES = 3;
 
 /**
@@ -33,16 +35,16 @@ export function useAddressEntry(input: {
   const [highlight, setHighlight] = useState<{ prompt: string; index: number } | null>(null);
   const [dismissedPrompt, setDismissedPrompt] = useState<string | null>(null);
   const text = input.prompt.trim();
+  const address = input.enabled ? addressFromText(text) : null;
   const visible =
     input.enabled &&
     text.length > 0 &&
-    text.length <= MAX_PROMPT_LENGTH &&
     !input.prompt.includes("\n") &&
-    dismissedPrompt !== input.prompt;
+    dismissedPrompt !== input.prompt &&
+    (address !== null || looksLikeQuery(text));
 
   const items: AddressEntryItem[] = [];
   if (visible) {
-    const address = addressFromText(text);
     const ask: AddressEntryItem = {
       id: "ask",
       label: text,
@@ -97,4 +99,13 @@ export function useAddressEntry(input: {
     move,
     dismiss: () => setDismissedPrompt(input.prompt),
   };
+}
+
+/** Short, unpunctuated text could be a search or a tab name; anything longer is a message. */
+function looksLikeQuery(text: string): boolean {
+  return (
+    text.length <= MAX_QUERY_LENGTH &&
+    text.split(/\s+/).length <= MAX_QUERY_WORDS &&
+    !/[?!.,;:]$/.test(text)
+  );
 }
