@@ -449,6 +449,26 @@ function Sidebar({
   );
 }
 
+let sidebarPeeking = false;
+const sidebarPeekListeners = new Set<() => void>();
+function publishSidebarPeeking(next: boolean) {
+  if (next === sidebarPeeking) return;
+  sidebarPeeking = next;
+  for (const listener of sidebarPeekListeners) listener();
+}
+
+/** Whether the collapsed sidebar is showing over the page, for controls drawn above it. */
+function useSidebarPeeking(): boolean {
+  return React.useSyncExternalStore(
+    (listener) => {
+      sidebarPeekListeners.add(listener);
+      return () => sidebarPeekListeners.delete(listener);
+    },
+    () => sidebarPeeking,
+    () => false,
+  );
+}
+
 const SIDEBAR_PEEK_CLOSE_DELAY_MS = 300;
 // Fast out of the gate, then settles: the panel is nearly in place well before 250ms.
 const SIDEBAR_PEEK_TRANSITION = "left 250ms cubic-bezier(0.16, 1, 0.3, 1)";
@@ -474,6 +494,8 @@ function useSidebarPeek(enabled: boolean) {
       setPeeking(false);
     }, SIDEBAR_PEEK_CLOSE_DELAY_MS);
   };
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- shares the peek with the app's floating sidebar control
+  React.useEffect(() => publishSidebarPeeking(peeking), [peeking]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- clears the pending close timer on unmount
   React.useEffect(
     () => () => {
@@ -956,6 +978,7 @@ function SidebarMenuSubButton({
 }
 
 export {
+  useSidebarPeeking,
   SidebarInput,
   Sidebar,
   SidebarContent,

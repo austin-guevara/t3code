@@ -61,6 +61,7 @@ import {
   SidebarTrigger,
   useMobileSidebarSheetMounted,
   useSidebar,
+  useSidebarPeeking,
   useSidebarVisibility,
 } from "./ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
@@ -322,6 +323,7 @@ function SidebarControl({ showSidebar }: { readonly showSidebar: boolean }) {
   const { toggleSidebar } = useSidebar();
   const mobileSidebarSheetMounted = useMobileSidebarSheetMounted();
   const isSidebarVisible = useSidebarVisibility();
+  const sidebarPeeking = useSidebarPeeking();
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
   const stageBackdropVariant = useSidebarStageBackdropVariant(environmentIdentificationMode);
   const shortcutLabel = shortcutLabelForCommand(keybindings, "sidebar.toggle", {
@@ -397,10 +399,16 @@ function SidebarControl({ showSidebar }: { readonly showSidebar: boolean }) {
           <TooltipTrigger
             render={
               <SidebarTrigger
-                variant={isSidebarVisible && stageBackdropVariant ? "media-navigation" : "ghost"}
+                variant={
+                  (isSidebarVisible || sidebarPeeking) && stageBackdropVariant
+                    ? "media-navigation"
+                    : "ghost"
+                }
                 className={cn(
                   "pointer-events-auto",
-                  isSidebarVisible && stageBackdropVariant && "relative top-auto translate-y-0",
+                  (isSidebarVisible || sidebarPeeking) &&
+                    stageBackdropVariant &&
+                    "relative top-auto translate-y-0",
                 )}
                 aria-label={gt("Toggle main sidebar")}
               />
