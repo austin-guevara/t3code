@@ -302,6 +302,7 @@ function Sidebar({
   const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const panelAnimationsActive = panelAnimationDurationMs > 0 && !prefersReducedMotion;
   const offcanvasCollapsed = !isMobile && collapsible === "offcanvas" && state === "collapsed";
+  const peek = useSidebarPeek(offcanvasCollapsed && side === "left");
 
   const resolvedResizable = resolveSidebarResizable({ collapsible, isMobile, resizable });
   const instanceContextValue: SidebarInstanceContextProps = { side, resizable: resolvedResizable };
@@ -380,7 +381,8 @@ function Sidebar({
         className="group peer hidden text-sidebar-foreground md:block"
         data-collapsible={state === "collapsed" ? collapsible : ""}
         data-collapsible-mode={collapsible}
-        inert={offcanvasCollapsed}
+        inert={offcanvasCollapsed && !peek.peeking}
+        data-peek={peek.peeking ? "true" : undefined}
         data-side={side}
         data-slot="sidebar"
         data-state={state}
@@ -412,18 +414,74 @@ function Sidebar({
           )}
           data-slot="sidebar-container"
           {...props}
+          style={peek.peeking ? { ...props.style, left: 0, zIndex: 50 } : props.style}
+          onPointerEnter={peek.onPointerEnter}
+          onPointerLeave={peek.onPointerLeave}
         >
           <div
-            className="flex h-full w-full flex-col bg-sidebar surface-grain group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-sm/5"
+            className="flex h-full w-full flex-col bg-sidebar surface-grain group-data-[peek=true]:shadow-2xl group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-sm/5"
             data-sidebar="sidebar"
             data-slot="sidebar-inner"
           >
             {children}
           </div>
         </div>
+        {peek.enabled && !peek.peeking ? (
+          // Generous on purpose: the pointer only has to reach the window's left edge.
+          <div
+            aria-hidden
+            className="fixed inset-y-0 left-0 z-50 w-3"
+            data-sidebar-peek-zone
+            onPointerEnter={peek.onPointerEnter}
+          />
+        ) : null}
       </div>
     </SidebarInstanceContext>
   );
+}
+
+const SIDEBAR_PEEK_CLOSE_DELAY_MS = 300;
+
+/** A collapsed sidebar slides over the page while the pointer is at the left edge or on it. */
+function useSidebarPeek(enabled: boolean) {
+  const [peeking, setPeeking] = React.useState(false);
+  const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  if (!enabled && peeking) setPeeking(false);
+  const cancelClose = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(function closeUnlessMenuOpen() {
+      // A menu opened from the sidebar renders outside it; stay until it closes.
+      if (document.querySelector('[role="menu"]')) {
+        closeTimer.current = setTimeout(closeUnlessMenuOpen, SIDEBAR_PEEK_CLOSE_DELAY_MS);
+        return;
+      }
+      closeTimer.current = null;
+      setPeeking(false);
+    }, SIDEBAR_PEEK_CLOSE_DELAY_MS);
+  };
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- clears the pending close timer on unmount
+  React.useEffect(
+    () => () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    },
+    [],
+  );
+  return {
+    enabled,
+    peeking,
+    onPointerEnter: (event: React.PointerEvent) => {
+      if (!enabled || event.pointerType === "touch") return;
+      cancelClose();
+      setPeeking(true);
+    },
+    onPointerLeave: () => {
+      if (peeking) scheduleClose();
+    },
+  };
 }
 
 function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<typeof Button>) {
