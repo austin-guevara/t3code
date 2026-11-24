@@ -400,15 +400,18 @@ function SidebarControl({ showSidebar }: { readonly showSidebar: boolean }) {
             render={
               <SidebarTrigger
                 variant={
-                  (isSidebarVisible || sidebarPeeking) && stageBackdropVariant
-                    ? "media-navigation"
+                  stageBackdropVariant
+                    ? isSidebarVisible
+                      ? "media-navigation"
+                      : sidebarPeeking
+                        ? // Only the colors follow the sidebar sliding under it; the button stays put.
+                          "media-navigation-static"
+                        : "ghost"
                     : "ghost"
                 }
                 className={cn(
                   "pointer-events-auto",
-                  (isSidebarVisible || sidebarPeeking) &&
-                    stageBackdropVariant &&
-                    "relative top-auto translate-y-0",
+                  isSidebarVisible && stageBackdropVariant && "relative top-auto translate-y-0",
                 )}
                 aria-label={gt("Toggle main sidebar")}
               />
