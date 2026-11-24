@@ -3718,7 +3718,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         if (isInsideRestingComposerControlScope(event.target)) return;
         composerMentionDragHandlers.onDrop(event);
       }}
-      className="mx-auto w-full min-w-0 max-w-(--chat-content-max-width)"
+      className="relative mx-auto w-full min-w-0 max-w-(--chat-content-max-width)"
       data-chat-composer-form="true"
       {...threadContextDropTargetProps()}
     >
@@ -3906,16 +3906,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     : composerMenuEmptyState
                   : ""}
               </div>
-              {!composerSuggestionsVisible && addressEntry.items.length > 0 && (
-                <ComposerCommandMenuLayer anchor={composerMenuAnchor}>
-                  <AddressEntryMenu
-                    items={addressEntry.items}
-                    activeIndex={addressEntry.activeIndex}
-                    onHighlight={addressEntry.setActiveIndex}
-                    onSelect={selectAddressEntryItem}
-                  />
-                </ComposerCommandMenuLayer>
-              )}
               {composerSuggestionsVisible && (
                 <ComposerCommandMenuLayer anchor={composerMenuAnchor}>
                   <ComposerCommandMenu
@@ -4234,6 +4224,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           </div>
         </ComposerSurface.Main>
       </div>
+      {!composerSuggestionsVisible && addressEntry.items.length > 0 ? (
+        <AddressEntryMenu
+          items={addressEntry.items}
+          activeIndex={addressEntry.activeIndex}
+          onHighlight={addressEntry.setActiveIndex}
+          onSelect={selectAddressEntryItem}
+        />
+      ) : null}
     </form>
   );
 });

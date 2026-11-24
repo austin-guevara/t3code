@@ -3,7 +3,6 @@ import { useGT } from "gt-react";
 import type { AddressEntryItem } from "~/pins/useAddressEntry";
 
 import { Command, CommandGroup, CommandItem, CommandList } from "../ui/command";
-import { ComposerBanner } from "./ComposerBanner";
 
 /** The new-session composer's suggestions: open the address, ask, search, or jump to a tab. */
 export function AddressEntryMenu(props: {
@@ -15,11 +14,11 @@ export function AddressEntryMenu(props: {
   const gt = useGT();
   return (
     <Command autoHighlight={false} mode="none">
-      <ComposerBanner.Surface
-        className="flex min-h-0 w-full flex-col overflow-hidden pb-(--chat-composer-attachment-overlap) **:data-[slot=command-item]:rounded-lg"
+      <div
+        className="absolute inset-x-0 top-full z-20 mt-2 flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-popover p-1.5 shadow-lg **:data-[slot=command-item]:rounded-lg"
         data-address-entry-menu
       >
-        <CommandList aria-label={gt("Open or ask")} className="max-h-72 min-h-0 scroll-pb-6">
+        <CommandList aria-label={gt("Open or ask")} className="max-h-72 min-h-0">
           <CommandGroup>
             {props.items.map((item, index) => (
               <CommandItem
@@ -50,7 +49,7 @@ export function AddressEntryMenu(props: {
             ))}
           </CommandGroup>
         </CommandList>
-      </ComposerBanner.Surface>
+      </div>
     </Command>
   );
 }

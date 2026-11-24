@@ -3874,7 +3874,8 @@ export default function ChatView(props: ChatViewProps) {
                                   isDraftHeroState &&
                                   activeThreadRef &&
                                   browserAvailable &&
-                                  canOperatePreview
+                                  canOperatePreview &&
+                                  rightPanelState.surfaces.length === 0
                                     ? (url) => void openPageInSession(activeThreadRef, url)
                                     : undefined
                                 }
