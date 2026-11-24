@@ -214,6 +214,7 @@ vi.mock("../lib/chatThreadActions", async (importOriginal) => ({
   resolveNewThreadModelSelectionOverride: () => null,
 }));
 vi.mock("../providerInstances", () => ({ resolveDefaultProviderModelSelection: () => null }));
+vi.mock("../browser/sessionRoutes", () => ({ threadHoldsBrowserTabs: () => false }));
 vi.mock("../lib/t3ProjectFileDefaults", () => ({
   readT3ProjectFile: () => testState.projectFileRead,
   peekT3ProjectFile: () => undefined,
