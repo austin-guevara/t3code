@@ -11,6 +11,8 @@ export interface NewTabTool {
   readonly icon: ComponentType<{ className?: string }>;
   readonly available: boolean;
   readonly disabledReason?: string;
+  /** A direct shortcut for the same surface, when there is one. */
+  readonly shortcut?: string | null;
   readonly onSelect: () => void;
 }
 
@@ -32,6 +34,9 @@ export function NewTabTools() {
             <>
               <Icon className="size-4 shrink-0" />
               <span className="min-w-0 flex-1 truncate">{tool.label}</span>
+              {tool.shortcut ? (
+                <span className="shrink-0 text-muted-foreground text-xs">{tool.shortcut}</span>
+              ) : null}
             </>
           );
           const className =

@@ -1382,6 +1382,10 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             icon: action.icon,
             available: action.available,
             disabledReason: action.disabledReason,
+            shortcut:
+              action.shortcut === "D"
+                ? shortcutLabelForCommand(props.keybindings, "diff.toggle")
+                : null,
             onSelect: () => replaceBlankTab(action.onClick),
           })),
       ]

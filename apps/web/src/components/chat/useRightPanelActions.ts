@@ -264,16 +264,6 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     }
   };
   const activateRightPanelSurfaceStable = useStableCallback(activateRightPanelSurface);
-  const toggleRightPanel = () => {
-    if (!activeThreadRef) return;
-    if (rightPanelOpen) {
-      closePreviewPanel();
-      return;
-    }
-    useRightPanelStore.getState().toggleVisibility(activeThreadRef);
-    focusActivePanelTerminal(activeThreadRef);
-  };
-  const toggleRightPanelStable = useStableCallback(toggleRightPanel);
   const toggleThreadPanel = () => {
     if (!activeThreadRef) return;
     const store = useRightPanelStore.getState();
@@ -305,6 +295,25 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     });
     return true;
   };
+  const toggleRightPanel = () => {
+    if (!activeThreadRef) return;
+    if (rightPanelOpen) {
+      closePreviewPanel();
+      return;
+    }
+    // A panel with nothing in it opens on a browser tab instead of an empty placeholder.
+    const { surfaces } = selectThreadRightPanelState(
+      useRightPanelStore.getState().byThreadKey,
+      activeThreadRef,
+    );
+    if (surfaces.length === 0 && canOperatePreview && browserAvailable) {
+      void openNewBrowserTab();
+      return;
+    }
+    useRightPanelStore.getState().toggleVisibility(activeThreadRef);
+    focusActivePanelTerminal(activeThreadRef);
+  };
+  const toggleRightPanelStable = useStableCallback(toggleRightPanel);
   // Full screen cycles through the chat tab too.
   const cycleRightPanelTab = (direction: 1 | -1) => {
     if (!activeThreadRef || !rightPanelOpen) return false;
