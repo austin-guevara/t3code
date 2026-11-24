@@ -21,6 +21,7 @@ import {
   useComposerDraftStore,
 } from "../composerDraftStore";
 import { newDraftId, newThreadId } from "../lib/utils";
+import { threadHoldsBrowserTabs } from "../browser/sessionRoutes";
 import { orderItemsByPreferredIds } from "../components/Sidebar.logic";
 import {
   deriveLogicalProjectKeyFromSettings,
@@ -329,7 +330,8 @@ export function createNewThreadHandler(router: AnyRouter) {
     }
     const emptyStoredDraftThread =
       reusableStoredDraftThread &&
-      !composerDraftHasUserContent(getComposerDraft(reusableStoredDraftThread.draftId))
+      !composerDraftHasUserContent(getComposerDraft(reusableStoredDraftThread.draftId)) &&
+      !threadHoldsBrowserTabs(storedDraftThreadRef!)
         ? reusableStoredDraftThread
         : null;
     const latestActiveDraftThread: DraftThreadState | null = currentRouteTarget
@@ -417,7 +419,10 @@ export function createNewThreadHandler(router: AnyRouter) {
       currentRouteTarget?.kind === "draft" &&
       latestActiveDraftThread.logicalProjectKey === logicalProjectKey &&
       latestActiveDraftThread.promotedTo == null &&
-      !composerDraftHasUserContent(getComposerDraft(currentRouteTarget.draftId))
+      !composerDraftHasUserContent(getComposerDraft(currentRouteTarget.draftId)) &&
+      !threadHoldsBrowserTabs(
+        scopeThreadRef(latestActiveDraftThread.environmentId, latestActiveDraftThread.threadId),
+      )
     ) {
       if (
         hasBranchOption ||

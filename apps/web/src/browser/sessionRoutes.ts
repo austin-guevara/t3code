@@ -1,7 +1,10 @@
 import type { ScopedThreadRef } from "@t3tools/contracts";
+import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { UseNavigateResult } from "@tanstack/react-router";
 
 import { useComposerDraftStore } from "~/composerDraftStore";
+import { readThreadPreviewState } from "~/previewStateStore";
+import { useRightPanelStore } from "~/rightPanelStore";
 import { buildThreadRouteParams } from "~/threadRoutes";
 
 /** The draft, if any, a thread id still belongs to. */
@@ -24,4 +27,13 @@ export function navigateToSession(navigate: UseNavigateResult<string>, threadRef
   return draftId !== null
     ? navigate({ to: "/draft/$draftId", params: { draftId } })
     : navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(threadRef) });
+}
+
+/** Whether a session keeps browser tabs, which make a draft worth keeping like typed text does. */
+export function threadHoldsBrowserTabs(threadRef: ScopedThreadRef): boolean {
+  const panel = useRightPanelStore.getState().byThreadKey[scopedThreadKey(threadRef)];
+  if (panel?.surfaces.some((surface) => surface.kind === "preview" && surface.resourceId)) {
+    return true;
+  }
+  return Object.keys(readThreadPreviewState(threadRef).sessions).length > 0;
 }

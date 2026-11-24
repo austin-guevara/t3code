@@ -7,7 +7,9 @@ import type {
   ScopedThreadRef,
 } from "@t3tools/contracts";
 
+import { openUrlInPreview } from "~/browser/openFileInPreview";
 import { closePreviewSession } from "~/components/preview/closePreviewSession";
+import { useRightPanelStore } from "~/rightPanelStore";
 import { openPreviewSession } from "~/components/preview/openPreviewSession";
 import { readThreadPreviewState } from "~/previewStateStore";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
@@ -57,4 +59,10 @@ export async function returnPinHome(pin: PinnedPage) {
 export async function closePinBrowser(pinId: string) {
   const threadRef = readPinThreadRef(pinId);
   if (threadRef) await closePinTabs(threadRef);
+}
+
+/** Opens a page in a session full screen, the way a page-first session starts. */
+export async function openPageInSession(threadRef: ScopedThreadRef, url: string) {
+  useRightPanelStore.getState().requestMaximize(threadRef);
+  await openUrlInPreview({ threadRef, url, openPreview });
 }

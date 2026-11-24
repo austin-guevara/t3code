@@ -159,6 +159,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { AsyncResult } from "effect/reactivity";
 import { isElectron } from "../env";
+import { openPageInSession } from "../pins/pinBrowser";
 import { useActiveThreadRef } from "../hooks/useActiveThreadRef";
 import { composerRequiresModifier } from "../composer-logic";
 import {
@@ -3869,6 +3870,14 @@ export default function ChatView(props: ChatViewProps) {
                                 routeKind={routeKind}
                                 routeThreadRef={routeThreadRef}
                                 draftId={draftId}
+                                onOpenPage={
+                                  isDraftHeroState &&
+                                  activeThreadRef &&
+                                  browserAvailable &&
+                                  canOperatePreview
+                                    ? (url) => void openPageInSession(activeThreadRef, url)
+                                    : undefined
+                                }
                                 activeThreadId={activeThreadId}
                                 activeThread={activeThread}
                                 activeThreadRuns={serverProjection?.runs ?? EMPTY_RUNS}

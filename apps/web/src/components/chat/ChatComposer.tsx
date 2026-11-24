@@ -214,6 +214,8 @@ import {
   ComposerCommandMenu,
   composerSuggestionOptionId,
 } from "./ComposerCommandMenu";
+import { AddressEntryMenu } from "./AddressEntryMenu";
+import { type AddressEntryItem, useAddressEntry } from "../../pins/useAddressEntry";
 import {
   ComposerAttachButton,
   ComposerAttachInput,
@@ -379,6 +381,8 @@ export interface ChatComposerProps {
   routeKind: "server" | "draft";
   routeThreadRef: ScopedThreadRef;
   draftId: DraftId | null;
+  /** Set in a new session, where a typed address opens as a page instead of a message. */
+  onOpenPage?: ((url: string) => void) | undefined;
   multipleModelSelections: ReadonlyArray<ModelSelection> | null;
   supportsMultipleModels: boolean;
   onMultipleModelSelectionsChange: React.Dispatch<
@@ -533,6 +537,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     routeKind,
     routeThreadRef,
     draftId,
+    onOpenPage,
     multipleModelSelections,
     supportsMultipleModels,
     onMultipleModelSelectionsChange: setMultipleModelSelections,
@@ -1237,6 +1242,26 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   });
 
   const composerMenuOpen = Boolean(composerTrigger);
+  const addressEntry = useAddressEntry({
+    enabled:
+      onOpenPage !== undefined &&
+      !composerMenuOpen &&
+      composerImages.length + composerFiles.length === 0,
+    prompt,
+    onOpenPage: (url) => {
+      setPrompt("");
+      onOpenPage?.(url);
+    },
+  });
+  const selectAddressEntryItem = (item: AddressEntryItem) => {
+    if (!item.run) {
+      addressEntry.dismiss();
+      composerFormRef.current?.requestSubmit();
+      return;
+    }
+    if (!item.id.startsWith("open") && !item.id.startsWith("search")) setPrompt("");
+    void item.run();
+  };
   const composerMenuSearchKey = composerTrigger
     ? `${composerSuggestionListId}:${composerTrigger.kind}:${composerTrigger.query.trim().toLowerCase()}`
     : null;
@@ -2560,6 +2585,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       : null;
 
   const onComposerCommandKey = (key: string, event: KeyboardEvent, isTaskItem?: boolean) => {
+    if (addressEntry.items.length > 0 && !event.isComposing && !event.shiftKey) {
+      if (key === "ArrowDown" || key === "ArrowUp") {
+        addressEntry.move(key === "ArrowDown" ? 1 : -1);
+        return true;
+      }
+      if (key === "Escape") {
+        addressEntry.dismiss();
+        return true;
+      }
+      const active = addressEntry.items[addressEntry.activeIndex];
+      if (key === "Enter" && active?.run && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        selectAddressEntryItem(active);
+        return true;
+      }
+    }
     if (key === "Escape" && composerSendHeld && !event.isComposing) {
       cancelHeldSend();
       return true;
@@ -3866,6 +3906,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     : composerMenuEmptyState
                   : ""}
               </div>
+              {!composerSuggestionsVisible && addressEntry.items.length > 0 && (
+                <ComposerCommandMenuLayer anchor={composerMenuAnchor}>
+                  <AddressEntryMenu
+                    items={addressEntry.items}
+                    activeIndex={addressEntry.activeIndex}
+                    onHighlight={addressEntry.setActiveIndex}
+                    onSelect={selectAddressEntryItem}
+                  />
+                </ComposerCommandMenuLayer>
+              )}
               {composerSuggestionsVisible && (
                 <ComposerCommandMenuLayer anchor={composerMenuAnchor}>
                   <ComposerCommandMenu
@@ -3962,7 +4012,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                             ? gt("Choose a project above to start a thread")
                             : showProviderUnavailable
                               ? gt("Enable a provider in Settings to send a message")
-                              : (offeredPromptSuggestion ?? m(DEFAULT_COMPOSER_PLACEHOLDER))
+                              : (offeredPromptSuggestion ??
+                                (onOpenPage
+                                  ? gt(
+                                      "Ask anything, or enter a URL. @ files, $ skills, / commands",
+                                    )
+                                  : m(DEFAULT_COMPOSER_PLACEHOLDER)))
                     }
                     placeholderSuffix={
                       offeredPromptSuggestion !== null ? (
