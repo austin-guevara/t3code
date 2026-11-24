@@ -71,12 +71,17 @@ import { isElectron } from "~/env";
 import type { DesktopPreviewOverlay } from "~/previewStateStore";
 import { linkedThreadTitle } from "~/linkedThreadSurface";
 import { pinnableUrl, pinsFull } from "~/pins/pinActions";
+import { type NewTabTool, NewTabToolsContext } from "./preview/NewTabTools";
 import { isOverPinDrop, usePinDropStore } from "~/pins/pinDropStore";
 import type { RightPanelSurface } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
 import { issueStatePresentation } from "~/components/issue/issuePresentation";
 import { issueEnvironment } from "~/state/issues";
-import { resolveShortcutCommand, type ShortcutMatchContext } from "~/keybindings";
+import {
+  resolveShortcutCommand,
+  shortcutLabelForCommand,
+  type ShortcutMatchContext,
+} from "~/keybindings";
 import { readLocalApi } from "~/localApi";
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { Button } from "~/components/ui/button";
@@ -1189,6 +1194,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   const focusedSurface = props.surfaces.find((surface) => surface.id === props.activeSurfaceId);
   const ownsDesktopTitleBar = isElectron && props.mode === "inline";
   const browserProfiles = useBrowserDefaults().profiles;
+  const newTabShortcutLabel = shortcutLabelForCommand(props.keybindings, "browser.newTab");
   const { resolvedTheme } = useTheme();
   const tabListRef = useRef<HTMLDivElement>(null);
   const addSurfaceTriggerRef = useRef<HTMLButtonElement>(null);
@@ -1340,6 +1346,46 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         ]
       : []),
   ] as const;
+
+  // An empty browser tab offers the other surfaces, which then take its place.
+  const activeSurface = props.surfaces.find((surface) => surface.id === props.activeSurfaceId);
+  const activeSnapshot =
+    activeSurface?.kind === "preview" && activeSurface.resourceId
+      ? props.previewSessions[activeSurface.resourceId]
+      : undefined;
+  const blankBrowserTab =
+    props.onNewTab !== undefined &&
+    activeSurface?.kind === "preview" &&
+    (activeSnapshot === undefined || activeSnapshot.navStatus._tag === "Idle")
+      ? activeSurface
+      : null;
+  const replaceBlankTab = (open: () => void) => {
+    open();
+    if (blankBrowserTab) props.onCloseSurface(blankBrowserTab);
+  };
+  const newTabTools: NewTabTool[] | null = blankBrowserTab
+    ? [
+        ...browserProfiles
+          .filter((profile) => profile.id !== activeSnapshot?.profileId)
+          .map((profile) => ({
+            id: `browser:${profile.id}`,
+            label: gt("Browser · {profile}", { profile: profile.name }),
+            icon: Globe2,
+            available: props.browserAvailable,
+            onSelect: () => replaceBlankTab(() => props.onAddBrowserInProfile(profile.id)),
+          })),
+        ...addSurfaceActions
+          .filter((action) => action.label !== "Browser")
+          .map((action) => ({
+            id: action.shortcut,
+            label: messages(action.label),
+            icon: action.icon,
+            available: action.available,
+            disabledReason: action.disabledReason,
+            onSelect: () => replaceBlankTab(action.onClick),
+          })),
+      ]
+    : null;
 
   const handleAddSurfaceMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const action = surfaceShortcutActionForKey(addSurfaceActions, event.nativeEvent);
@@ -1647,7 +1693,33 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                 );
               })}
             </SortableTabList>
-            {props.open !== false ? (
+            {props.open !== false && props.onNewTab && props.browserAvailable ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      ref={addSurfaceTriggerRef}
+                      aria-label={gt("New tab")}
+                      className="shrink-0"
+                      size="icon-xs"
+                      variant="ghost-muted"
+                      onClick={props.onNewTab}
+                    />
+                  }
+                >
+                  <Plus className="size-3.5" />
+                </TooltipTrigger>
+                <TooltipPopup>
+                  {newTabShortcutLabel ? (
+                    <>
+                      <T>New tab</T> <Kbd>{newTabShortcutLabel}</Kbd>
+                    </>
+                  ) : (
+                    <T>New tab</T>
+                  )}
+                </TooltipPopup>
+              </Tooltip>
+            ) : props.open !== false ? (
               <Menu open={addSurfaceMenuOpen} onOpenChange={setAddSurfaceMenuOpen}>
                 <MenuTrigger
                   ref={addSurfaceTriggerRef}
@@ -1809,7 +1881,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             sideChatDisabledReason={props.sideChatDisabledReason ?? null}
           />
         ) : (
-          props.children
+          <NewTabToolsContext value={newTabTools}>{props.children}</NewTabToolsContext>
         )}
       </div>
     </PreviewPanelShell>

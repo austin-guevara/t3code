@@ -1,3 +1,4 @@
+import { NewTabTools } from "./NewTabTools";
 import { T } from "gt-react";
 import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
 import { parseUrl } from "@t3tools/shared/url";
@@ -36,26 +37,32 @@ export function PreviewEmptyState({
 
   if (servers.length === 0 && recents.length === 0) {
     return (
-      <Empty>
-        <EmptyMedia variant="icon">
-          <Globe className="size-4.5 text-muted-foreground" />
-        </EmptyMedia>
-        <EmptyTitle>
-          <T>No preview yet</T>
-        </EmptyTitle>
-        <EmptyDescription>
-          <T>
-            Type a URL above, or run a dev script. Local servers this thread starts will show up
-            here automatically.
-          </T>
-        </EmptyDescription>
-      </Empty>
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="mx-auto w-full max-w-xl px-5 pt-8 empty:hidden">
+          <NewTabTools />
+        </div>
+        <Empty>
+          <EmptyMedia variant="icon">
+            <Globe className="size-4.5 text-muted-foreground" />
+          </EmptyMedia>
+          <EmptyTitle>
+            <T>No preview yet</T>
+          </EmptyTitle>
+          <EmptyDescription>
+            <T>
+              Type a URL above, or run a dev script. Local servers this thread starts will show up
+              here automatically.
+            </T>
+          </EmptyDescription>
+        </Empty>
+      </div>
     );
   }
 
   return (
     <div className="scrollbar-gutter-both flex h-full min-h-0 overflow-y-auto px-5 py-8">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
+        <NewTabTools />
         {recents.length > 0 ? (
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
