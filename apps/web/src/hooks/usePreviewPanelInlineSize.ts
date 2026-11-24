@@ -15,6 +15,8 @@ const PREVIEW_PANEL_MIN_WIDTH = 360;
 const PREVIEW_PANEL_MAX_WIDTH_FRACTION = 0.7;
 /** Below this, the sibling chat column's composer overflows. */
 const SIBLING_COLUMN_MIN_WIDTH = 360;
+/** Until a width is chosen, the panel takes this share of the row it shares with the chat. */
+const PREVIEW_PANEL_DEFAULT_ROW_FRACTION = 0.6;
 const PREVIEW_PANEL_DEFAULT_WIDTH = 540;
 
 export function usePreviewPanelInlineSize(
@@ -30,9 +32,10 @@ export function usePreviewPanelInlineSize(
   const [maxWidth, setMaxWidth] = useState(() =>
     getPreviewPanelMaxWidth(typeof window === "undefined" ? 1280 : window.innerWidth),
   );
+  const [rowDefaultWidth, setRowDefaultWidth] = useState<number | null>(null);
   const { width, handlers } = useResizableWidth({
     storageKey: options.widthStorageKey ?? PREVIEW_PANEL_WIDTH_STORAGE_KEY,
-    defaultWidth: options.defaultWidth ?? PREVIEW_PANEL_DEFAULT_WIDTH,
+    defaultWidth: options.defaultWidth ?? rowDefaultWidth ?? PREVIEW_PANEL_DEFAULT_WIDTH,
     minWidth: PREVIEW_PANEL_MIN_WIDTH,
     maxWidth,
     edge: "left",
@@ -44,6 +47,12 @@ export function usePreviewPanelInlineSize(
     // of a sidebar drag, but an unchanged cap skips re-rendering the owner.
     const measure = () => {
       setMaxWidth(getPreviewPanelMaxWidth(window.innerWidth, row?.clientWidth));
+      // Rounded to 20px so a sidebar drag does not re-render the owner every frame.
+      if (row) {
+        setRowDefaultWidth(
+          Math.round((row.clientWidth * PREVIEW_PANEL_DEFAULT_ROW_FRACTION) / 20) * 20,
+        );
+      }
     };
     measure();
     let frame = 0;
