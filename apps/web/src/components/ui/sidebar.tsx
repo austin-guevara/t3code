@@ -414,7 +414,16 @@ function Sidebar({
           )}
           data-slot="sidebar-container"
           {...props}
-          style={peek.peeking ? { ...props.style, left: 0, zIndex: 50 } : props.style}
+          style={
+            peek.enabled
+              ? {
+                  ...props.style,
+                  ...(peek.peeking ? { left: 0 } : {}),
+                  zIndex: 50,
+                  transition: prefersReducedMotion ? "none" : SIDEBAR_PEEK_TRANSITION,
+                }
+              : props.style
+          }
           onPointerEnter={peek.onPointerEnter}
           onPointerLeave={peek.onPointerLeave}
         >
@@ -426,21 +435,23 @@ function Sidebar({
             {children}
           </div>
         </div>
-        {peek.enabled && !peek.peeking ? (
-          // Generous on purpose: the pointer only has to reach the window's left edge.
-          <div
-            aria-hidden
-            className="fixed inset-y-0 left-0 z-50 w-3"
-            data-sidebar-peek-zone
-            onPointerEnter={peek.onPointerEnter}
-          />
-        ) : null}
       </div>
+      {peek.enabled && !peek.peeking ? (
+        // Outside the inert sidebar, which would swallow its pointer events. Generous on purpose.
+        <div
+          aria-hidden
+          className="fixed inset-y-0 left-0 z-50 w-3"
+          data-sidebar-peek-zone
+          onPointerEnter={peek.onPointerEnter}
+        />
+      ) : null}
     </SidebarInstanceContext>
   );
 }
 
 const SIDEBAR_PEEK_CLOSE_DELAY_MS = 300;
+// Fast out of the gate, then settles: the panel is nearly in place well before 250ms.
+const SIDEBAR_PEEK_TRANSITION = "left 250ms cubic-bezier(0.16, 1, 0.3, 1)";
 
 /** A collapsed sidebar slides over the page while the pointer is at the left edge or on it. */
 function useSidebarPeek(enabled: boolean) {
